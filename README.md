@@ -14,9 +14,10 @@ This is not the old stock scanner and does not import it at runtime. Schwab auth
 
 - Watches `CORE_UNIVERSE | UOA_IN_PLAY`
 - Loads near-term Schwab option chains
-- Prioritizes 0DTE, then 1DTE-7DTE
+- Scans 0DTE through 60DTE with stricter requirements for noisy ETFs and longer-dated flow
 - Focuses strikes near spot, with exceptional-volume escape hatch
 - Detects unusual volume, Vol/OI, large estimated premium, and 5-minute acceleration
+- Lets 30DTE-60DTE whale flow through when premium/Vol-OI is meaningful
 - Aggregates nearby abnormal strikes into ticker-level call/put surge alerts
 - Suppresses duplicate alerts with cooldown and escalation rules
 - Sends one Discord webhook embed destination

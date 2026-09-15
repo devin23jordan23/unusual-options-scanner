@@ -184,8 +184,11 @@ class SchwabClient:
         for snap in snapshots:
             if snap.contract.dte > self.settings.max_dte:
                 continue
-            exceptional = snap.volume >= self.settings.thresholds.min_volume * 4
-            if lower <= snap.contract.strike <= upper or exceptional:
+            thresholds = self.settings.thresholds_for(snap.contract.symbol)
+            premium = max(snap.mark or 0, 0) * snap.volume * 100
+            exceptional = snap.volume >= thresholds.min_volume * 4
+            whale_flow = premium >= thresholds.long_dte_min_premium
+            if lower <= snap.contract.strike <= upper or exceptional or whale_flow:
                 kept.append(snap)
         return kept
 
@@ -227,4 +230,3 @@ def extract_underlying_price(data: dict) -> float | None:
         if value:
             return value
     return None
-

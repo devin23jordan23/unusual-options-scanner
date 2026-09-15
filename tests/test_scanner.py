@@ -30,9 +30,22 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertEqual(estimated_premium(snap(mark=1.25), 400), 50_000)
 
     def test_dte_prioritization(self):
-        alert = evaluate_contract(snap(volume=500, oi=100), 360, Thresholds(min_volume=1000, min_volume_0dte=350, min_score=2))
+        alert = evaluate_contract(snap(volume=500, oi=100), 360, Thresholds(min_volume=1000, min_volume_0dte=350, min_score=3))
         self.assertIsNotNone(alert)
         self.assertIn("0DTE activity", alert.reasons)
+
+    def test_zero_dte_label_is_not_enough_by_itself(self):
+        alert = evaluate_contract(snap(volume=400, oi=500, mark=0.25), 25, Thresholds(min_score=2))
+        self.assertIsNone(alert)
+
+    def test_long_dte_whale_flow_passes(self):
+        alert = evaluate_contract(snap(volume=6000, oi=1000, mark=2.0, dte=45), 0, Thresholds())
+        self.assertIsNotNone(alert)
+        self.assertIn("longer-dated high-premium flow", alert.reasons)
+
+    def test_long_dte_noise_is_suppressed(self):
+        alert = evaluate_contract(snap(volume=700, oi=500, mark=1.0, dte=45), 0, Thresholds())
+        self.assertIsNone(alert)
 
     def test_contract_threshold_evaluation(self):
         alert = evaluate_contract(snap(volume=6482, oi=903, mark=2.5), 2141, Thresholds())
@@ -73,4 +86,3 @@ class ScannerUnitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
