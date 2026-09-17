@@ -10,6 +10,7 @@ from app.metrics import estimated_premium, volume_oi_ratio
 from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
 from app.rules import evaluate_contract
 from app.state import AlertDeduper, RollingState
+from app.oauth import callback_code
 
 
 def snap(symbol="NVDA", strike=195.0, side=OptionSide.CALL, volume=2500, oi=700, mark=2.0, dte=0, ts=None):
@@ -19,6 +20,13 @@ def snap(symbol="NVDA", strike=195.0, side=OptionSide.CALL, volume=2500, oi=700,
 
 
 class ScannerUnitTests(unittest.TestCase):
+    def test_schwab_callback_code_extraction(self):
+        url = "https://127.0.0.1/?code=sample%40code&session=abc"
+        self.assertEqual(callback_code(url), "sample@code")
+
+    def test_schwab_callback_code_missing(self):
+        self.assertEqual(callback_code("https://127.0.0.1/"), "")
+
     def test_volume_oi_calculation(self):
         self.assertEqual(volume_oi_ratio(1000, 500), 2.0)
 

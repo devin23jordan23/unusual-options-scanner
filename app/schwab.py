@@ -11,6 +11,7 @@ import requests
 
 from .config import Settings
 from .models import OptionContract, OptionSide, OptionSnapshot
+from .oauth import callback_code
 
 LOG = logging.getLogger(__name__)
 AUTH_URL = "https://api.schwabapi.com/v1/oauth/authorize"
@@ -28,6 +29,7 @@ class SchwabClient:
         self.client_secret = os.getenv("SCHWAB_CLIENT_SECRET", "")
         self.seed_refresh_token = os.getenv("SCHWAB_REFRESH_TOKEN", "")
         self.seed_access_token = os.getenv("SCHWAB_ACCESS_TOKEN", "")
+        self.auth_callback_url = os.getenv("SCHWAB_AUTH_CALLBACK_URL", "")
         os.makedirs(settings.data_dir, exist_ok=True)
         self.token_file = os.path.join(settings.data_dir, "schwab_tokens.json")
 
@@ -113,6 +115,8 @@ class SchwabClient:
             if not tokens["access_token"] or expired(tokens):
                 return self.refresh_tokens(tokens)
             return tokens
+        if self.auth_callback_url:
+            return self.exchange_callback_url(self.auth_callback_url)
         return {}
 
     def save_tokens(self, tokens: dict) -> None:
@@ -139,6 +143,27 @@ class SchwabClient:
             new_tokens["refresh_token"] = tokens.get("refresh_token")
         self.save_tokens(new_tokens)
         return new_tokens
+
+    def exchange_callback_url(self, callback_url: str) -> dict:
+        if not self.client_id or not self.client_secret:
+            raise RuntimeError("SCHWAB_CLIENT_ID and SCHWAB_CLIENT_SECRET are required")
+        code = callback_code(callback_url)
+        if not code:
+            raise RuntimeError("SCHWAB_AUTH_CALLBACK_URL does not contain a Schwab authorization code")
+        basic = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+        resp = requests.post(
+            TOKEN_URL,
+            headers={"Authorization": f"Basic {basic}", "Content-Type": "application/x-www-form-urlencoded"},
+            data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI},
+            timeout=15,
+        )
+        if resp.status_code in (400, 401, 403):
+            raise RuntimeError("Schwab authorization URL is expired or invalid; sign in again and paste the new redirected URL")
+        resp.raise_for_status()
+        tokens = resp.json()
+        self.save_tokens(tokens)
+        LOG.info("Schwab authorization completed; remove SCHWAB_AUTH_CALLBACK_URL from Railway")
+        return tokens
 
     def _parse_side(self, symbol: str, exp_map: dict, side: OptionSide, underlying: float, now: datetime) -> list[OptionSnapshot]:
         out = []

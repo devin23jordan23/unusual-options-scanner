@@ -36,6 +36,10 @@ DATA_DIR=/app/data
 LOG_LEVEL=INFO
 ```
 
+For initial authorization without Telegram, follow
+[`docs/RAILWAY_SETUP.md`](docs/RAILWAY_SETUP.md). The scanner accepts the full
+Schwab redirect URL through a temporary `SCHWAB_AUTH_CALLBACK_URL` variable.
+
 ## Mock Mode
 
 ```bash
