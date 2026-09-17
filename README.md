@@ -18,7 +18,7 @@ This is not the old stock scanner and does not import it at runtime. Schwab auth
 - Focuses strikes near spot, with exceptional-volume escape hatch
 - Detects unusual volume, Vol/OI, large estimated premium, and 5-minute acceleration
 - Lets 30DTE-60DTE whale flow through when premium/Vol-OI is meaningful
-- Aggregates nearby abnormal strikes into ticker-level call/put surge alerts
+- Ranks individual contracts without emitting multi-strike cluster alerts
 - Suppresses duplicate alerts with cooldown and escalation rules
 - Warms up on the first snapshot, ranks candidates, and sends at most three distinct tickers per cycle
 - Compresses grouped strikes into one summary and applies a 15-minute ticker-wide cooldown

@@ -113,6 +113,13 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertNotIn("Nearby Strikes", names)
         self.assertNotIn("Estimated Activity", names)
 
+    def test_contract_payload_hides_five_minute_volume(self):
+        alert = evaluate_contract(snap(volume=6482, oi=903, mark=2.5), 2141, Thresholds())
+        payload = DiscordNotifier("").payload(alert)
+        names = {field["name"] for field in payload["embeds"][0]["fields"]}
+        self.assertNotIn("New 5m Volume", names)
+        self.assertIn("Reason", names)
+
     def test_symbol_specific_thresholds(self):
         settings = Settings(symbol_overrides={"SPY": Thresholds(min_volume=5000)})
         self.assertEqual(settings.thresholds_for("SPY").min_volume, 5000)

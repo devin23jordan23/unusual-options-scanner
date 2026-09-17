@@ -53,7 +53,6 @@ class DiscordNotifier:
                 {"name": "Contract", "value": f"{snap.contract.display} | {snap.contract.dte}DTE", "inline": True},
                 {"name": "Volume / OI", "value": f"{snap.volume:,} / {snap.open_interest:,}", "inline": True},
                 {"name": "Vol/OI", "value": "n/a" if snap.vol_oi is None else f"{snap.vol_oi:.2f}x", "inline": True},
-                {"name": "New 5m Volume", "value": f"+{alert.volume_delta_5m:,}", "inline": True},
                 {"name": "Underlying", "value": "n/a" if snap.underlying_price is None else f"${snap.underlying_price:.2f}", "inline": True},
             ]
         if alert.alert_type == "contract" and alert.estimated_premium >= 100_000:

@@ -2,7 +2,6 @@ import logging
 import os
 import time
 
-from .aggregation import ticker_level_alerts
 from .config import Settings
 from .discord import DiscordNotifier
 from .market_hours import is_market_open
@@ -45,7 +44,6 @@ class Scanner:
 
     def run_once(self) -> None:
         snapshots = self.data.option_snapshots(self.settings.active_universe)
-        abnormal = []
         candidates = []
         for snap in snapshots:
             has_history = self.rolling.has_history(snap)
@@ -56,17 +54,10 @@ class Scanner:
             alert = evaluate_contract(snap, delta, self.settings.thresholds_for(snap.contract.symbol))
             if not alert:
                 continue
-            abnormal.append(snap)
             cooldown = self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
             if self.deduper.should_send_contract(alert, cooldown):
                 candidates.append(alert)
         now_ts = time.time()
-        for alert in ticker_level_alerts(abnormal, self.settings):
-            key = f"{alert.snapshot.contract.symbol}:{alert.snapshot.contract.side.value}:{alert.snapshot.contract.dte}"
-            cooldown = self.settings.thresholds_for(alert.snapshot.contract.symbol).ticker_cooldown_seconds
-            if self.deduper.should_send_ticker(key, now_ts, cooldown):
-                candidates.append(alert)
-
         eligible = [
             alert for alert in candidates
             if self.deduper.should_send_ticker(
@@ -81,9 +72,6 @@ class Scanner:
                 self.deduper.mark_ticker(f"{alert.snapshot.contract.symbol}:ALL", now_ts)
                 if alert.alert_type == "contract":
                     self.deduper.mark_contract(alert)
-                    continue
-                key = f"{alert.snapshot.contract.symbol}:{alert.snapshot.contract.side.value}:{alert.snapshot.contract.dte}"
-                self.deduper.mark_ticker(key, now_ts)
         LOG.info(
             "scan complete snapshots=%s qualified=%s selected=%s",
             len(snapshots),
