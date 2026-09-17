@@ -6,7 +6,7 @@ from .models import Alert, OptionSide, OptionSnapshot, Severity
 def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds: Thresholds) -> Alert | None:
     min_volume = thresholds.min_volume_0dte if snapshot.contract.dte == 0 else thresholds.min_volume
     min_delta = thresholds.min_5m_volume_increase_0dte if snapshot.contract.dte == 0 else thresholds.min_5m_volume_increase
-    premium = estimated_premium(snapshot, volume_delta_5m or snapshot.volume)
+    premium = estimated_premium(snapshot, volume_delta_5m)
     ratio = snapshot.vol_oi
     long_dte = snapshot.contract.dte > 7
     score = 0

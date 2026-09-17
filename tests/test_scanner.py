@@ -9,6 +9,7 @@ from app.config import Settings, Thresholds
 from app.metrics import estimated_premium, volume_oi_ratio
 from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
 from app.rules import evaluate_contract
+from app.scanner import strongest_distinct_tickers
 from app.state import AlertDeduper, RollingState
 from app.oauth import callback_code
 
@@ -47,7 +48,7 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertIsNone(alert)
 
     def test_long_dte_whale_flow_passes(self):
-        alert = evaluate_contract(snap(volume=6000, oi=1000, mark=2.0, dte=45), 0, Thresholds())
+        alert = evaluate_contract(snap(volume=6000, oi=1000, mark=2.0, dte=45), 6000, Thresholds())
         self.assertIsNotNone(alert)
         self.assertIn("longer-dated high-premium flow", alert.reasons)
 
@@ -78,8 +79,24 @@ class ScannerUnitTests(unittest.TestCase):
         early = snap(volume=1900, ts=datetime(2026, 9, 11, 10, 2, tzinfo=ZoneInfo("America/New_York")))
         late = snap(volume=4800, ts=datetime(2026, 9, 11, 10, 7, tzinfo=ZoneInfo("America/New_York")))
         state.record(early)
+        self.assertTrue(state.has_history(late))
         state.record(late)
         self.assertEqual(state.volume_delta(late, 300), 2900)
+
+    def test_first_snapshot_has_no_history(self):
+        state = RollingState()
+        first = snap()
+        self.assertFalse(state.has_history(first))
+        state.record(first)
+        self.assertTrue(state.has_history(first))
+
+    def test_alert_selection_caps_and_deduplicates_tickers(self):
+        nvda = evaluate_contract(snap(symbol="NVDA", volume=7000, oi=500, mark=3), 4000, Thresholds())
+        nvda_second = evaluate_contract(snap(symbol="NVDA", strike=200, volume=6000, oi=500, mark=2), 3000, Thresholds())
+        tsla = evaluate_contract(snap(symbol="TSLA", volume=5000, oi=500, mark=2), 2500, Thresholds())
+        selected = strongest_distinct_tickers([nvda_second, tsla, nvda], 2)
+        self.assertEqual(len(selected), 2)
+        self.assertEqual({a.snapshot.contract.symbol for a in selected}, {"NVDA", "TSLA"})
 
     def test_ticker_level_aggregation_and_clustering(self):
         alerts = ticker_level_alerts([snap(strike=190), snap(strike=192.5), snap(strike=195), snap(strike=240)], Settings(cluster_min_contracts=3))

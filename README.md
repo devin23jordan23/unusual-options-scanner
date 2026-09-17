@@ -20,6 +20,7 @@ This is not the old stock scanner and does not import it at runtime. Schwab auth
 - Lets 30DTE-60DTE whale flow through when premium/Vol-OI is meaningful
 - Aggregates nearby abnormal strikes into ticker-level call/put surge alerts
 - Suppresses duplicate alerts with cooldown and escalation rules
+- Warms up on the first snapshot, ranks candidates, and sends at most five distinct tickers per cycle
 - Sends one Discord webhook embed destination
 - Supports mock mode for weekends/off-market testing
 

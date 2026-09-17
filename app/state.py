@@ -27,6 +27,9 @@ class RollingState:
         while q and q[0].timestamp.timestamp() < cutoff:
             q.popleft()
 
+    def has_history(self, snapshot: OptionSnapshot) -> bool:
+        return bool(self.snapshots.get(snapshot.contract.option_symbol))
+
     def volume_delta(self, snapshot: OptionSnapshot, seconds: int = 300) -> int:
         q = self.snapshots.get(snapshot.contract.option_symbol)
         if not q:
@@ -104,4 +107,3 @@ def severity_rank(severity: str) -> int:
 
 def premium_floor(tier: str) -> float:
     return {"large": 100_000, "major": 500_000, "whale": 1_000_000, "extreme": 2_000_000}.get(tier, 0)
-

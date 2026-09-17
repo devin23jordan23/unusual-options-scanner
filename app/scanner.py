@@ -8,7 +8,7 @@ from .discord import DiscordNotifier
 from .market_hours import is_market_open
 from .mock import MockData
 from .rules import evaluate_contract
-from .state import AlertDeduper, RollingState
+from .state import AlertDeduper, RollingState, severity_rank
 
 LOG = logging.getLogger(__name__)
 
@@ -46,8 +46,12 @@ class Scanner:
     def run_once(self) -> None:
         snapshots = self.data.option_snapshots(self.settings.active_universe)
         abnormal = []
+        candidates = []
         for snap in snapshots:
+            has_history = self.rolling.has_history(snap)
             self.rolling.record(snap)
+            if not has_history:
+                continue
             delta = self.rolling.volume_delta(snap, 300)
             alert = evaluate_contract(snap, delta, self.settings.thresholds_for(snap.contract.symbol))
             if not alert:
@@ -55,11 +59,50 @@ class Scanner:
             abnormal.append(snap)
             cooldown = self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
             if self.deduper.should_send_contract(alert, cooldown):
-                self.discord.send(alert)
-                self.deduper.mark_contract(alert)
+                candidates.append(alert)
         now_ts = time.time()
         for alert in ticker_level_alerts(abnormal, self.settings):
             key = f"{alert.snapshot.contract.symbol}:{alert.snapshot.contract.side.value}:{alert.snapshot.contract.dte}"
-            if self.deduper.should_send_ticker(key, now_ts, self.settings.thresholds.ticker_cooldown_seconds):
-                self.discord.send(alert)
+            cooldown = self.settings.thresholds_for(alert.snapshot.contract.symbol).ticker_cooldown_seconds
+            if self.deduper.should_send_ticker(key, now_ts, cooldown):
+                candidates.append(alert)
+
+        selected = strongest_distinct_tickers(candidates, self.settings.max_alerts_per_cycle)
+        for alert in selected:
+            if self.discord.send(alert):
+                if alert.alert_type == "contract":
+                    self.deduper.mark_contract(alert)
+                    continue
+                key = f"{alert.snapshot.contract.symbol}:{alert.snapshot.contract.side.value}:{alert.snapshot.contract.dte}"
                 self.deduper.mark_ticker(key, now_ts)
+        LOG.info(
+            "scan complete snapshots=%s qualified=%s selected=%s",
+            len(snapshots),
+            len(candidates),
+            len(selected),
+        )
+
+
+def strongest_distinct_tickers(alerts, limit: int):
+    ranked = sorted(alerts, key=alert_rank, reverse=True)
+    selected = []
+    seen = set()
+    for alert in ranked:
+        symbol = alert.snapshot.contract.symbol
+        if symbol in seen:
+            continue
+        seen.add(symbol)
+        selected.append(alert)
+        if len(selected) >= max(limit, 0):
+            break
+    return selected
+
+
+def alert_rank(alert):
+    return (
+        severity_rank(alert.severity.value),
+        1 if alert.alert_type == "ticker" else 0,
+        alert.volume_delta_5m,
+        alert.estimated_premium,
+        alert.snapshot.vol_oi or 0,
+    )
