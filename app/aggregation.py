@@ -1,7 +1,6 @@
 from collections import defaultdict
 
 from .config import Settings
-from .metrics import estimated_premium
 from .models import Alert, OptionSide, OptionSnapshot, Severity
 
 
@@ -16,14 +15,15 @@ def ticker_level_alerts(snapshots: list[OptionSnapshot], settings: Settings) -> 
             if len(cluster) < settings.cluster_min_contracts:
                 continue
             side_name = "CALL" if side == OptionSide.CALL else "PUT"
+            lead = max(cluster, key=lambda s: (s.volume, s.vol_oi or 0))
             alerts.append(Alert(
                 "ticker",
                 Severity.EXTREME if len(cluster) >= 5 else Severity.HIGH,
                 f"{symbol} {side_name} ACTIVITY SURGE",
-                cluster[0],
+                lead,
                 [f"{len(cluster)} nearby {dte}DTE strikes showing elevated {side_name.lower()} activity"],
                 0,
-                sum(estimated_premium(s) for s in cluster),
+                0,
                 cluster,
             ))
     return alerts
@@ -44,4 +44,3 @@ def clusters(items: list[OptionSnapshot], max_gap_pct: float) -> list[list[Optio
     if current:
         out.append(current)
     return out
-

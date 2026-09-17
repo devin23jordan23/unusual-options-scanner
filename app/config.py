@@ -60,7 +60,8 @@ class Settings:
     strike_range_pct: float = 0.10
     cluster_min_contracts: int = 3
     cluster_max_strike_gap_pct: float = 0.025
-    max_alerts_per_cycle: int = 5
+    max_alerts_per_cycle: int = 3
+    symbol_cooldown_seconds: int = 900
     thresholds: Thresholds = field(default_factory=Thresholds)
     symbol_overrides: dict[str, Thresholds] = field(default_factory=dict)
 
@@ -130,7 +131,8 @@ def load_settings() -> Settings:
         strike_range_pct=float(os.getenv("UOA_STRIKE_RANGE_PCT", "0.10")),
         cluster_min_contracts=int(os.getenv("UOA_CLUSTER_MIN_CONTRACTS", "3")),
         cluster_max_strike_gap_pct=float(os.getenv("UOA_CLUSTER_MAX_STRIKE_GAP_PCT", "0.025")),
-        max_alerts_per_cycle=int(os.getenv("UOA_MAX_ALERTS_PER_CYCLE", "5")),
+        max_alerts_per_cycle=int(os.getenv("UOA_MAX_ALERTS_PER_CYCLE", "3")),
+        symbol_cooldown_seconds=int(os.getenv("UOA_SYMBOL_COOLDOWN_SECONDS", "900")),
         thresholds=t,
         symbol_overrides={**{symbol: etf_t for symbol in etfs}, "SPY": mega_etf_t, "QQQ": mega_etf_t},
     )

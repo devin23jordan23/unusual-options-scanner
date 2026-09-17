@@ -67,9 +67,18 @@ class Scanner:
             if self.deduper.should_send_ticker(key, now_ts, cooldown):
                 candidates.append(alert)
 
-        selected = strongest_distinct_tickers(candidates, self.settings.max_alerts_per_cycle)
+        eligible = [
+            alert for alert in candidates
+            if self.deduper.should_send_ticker(
+                f"{alert.snapshot.contract.symbol}:ALL",
+                now_ts,
+                self.settings.symbol_cooldown_seconds,
+            )
+        ]
+        selected = strongest_distinct_tickers(eligible, self.settings.max_alerts_per_cycle)
         for alert in selected:
             if self.discord.send(alert):
+                self.deduper.mark_ticker(f"{alert.snapshot.contract.symbol}:ALL", now_ts)
                 if alert.alert_type == "contract":
                     self.deduper.mark_contract(alert)
                     continue

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from app.aggregation import ticker_level_alerts
 from app.config import Settings, Thresholds
+from app.discord import DiscordNotifier
 from app.metrics import estimated_premium, volume_oi_ratio
 from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
 from app.rules import evaluate_contract
@@ -45,6 +46,10 @@ class ScannerUnitTests(unittest.TestCase):
 
     def test_zero_dte_label_is_not_enough_by_itself(self):
         alert = evaluate_contract(snap(volume=400, oi=500, mark=0.25), 25, Thresholds(min_score=2))
+        self.assertIsNone(alert)
+
+    def test_stale_cumulative_volume_is_suppressed(self):
+        alert = evaluate_contract(snap(volume=9000, oi=10, mark=4), 0, Thresholds())
         self.assertIsNone(alert)
 
     def test_long_dte_whale_flow_passes(self):
@@ -102,6 +107,11 @@ class ScannerUnitTests(unittest.TestCase):
         alerts = ticker_level_alerts([snap(strike=190), snap(strike=192.5), snap(strike=195), snap(strike=240)], Settings(cluster_min_contracts=3))
         self.assertEqual(len(alerts), 1)
         self.assertEqual(len(alerts[0].grouped_contracts), 3)
+        payload = DiscordNotifier("").payload(alerts[0])
+        names = {field["name"] for field in payload["embeds"][0]["fields"]}
+        self.assertIn("Strike Range", names)
+        self.assertNotIn("Nearby Strikes", names)
+        self.assertNotIn("Estimated Activity", names)
 
     def test_symbol_specific_thresholds(self):
         settings = Settings(symbol_overrides={"SPY": Thresholds(min_volume=5000)})

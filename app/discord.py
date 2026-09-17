@@ -33,18 +33,31 @@ class DiscordNotifier:
         color = 0x2ECC71 if snap.contract.side == OptionSide.CALL else 0xE74C3C
         if alert.severity.value == "EXTREME":
             color = 0xF1C40F
-        fields = [
-            {"name": "Contract", "value": f"{snap.contract.display} - {snap.contract.dte}DTE", "inline": True},
-            {"name": "Volume", "value": f"{snap.volume:,}", "inline": True},
-            {"name": "Open Interest", "value": f"{snap.open_interest:,}", "inline": True},
-            {"name": "Vol/OI", "value": "n/a" if snap.vol_oi is None else f"{snap.vol_oi:.2f}x", "inline": True},
-            {"name": "5m Volume Increase", "value": f"+{alert.volume_delta_5m:,}", "inline": True},
-            {"name": "Underlying", "value": "n/a" if snap.underlying_price is None else f"${snap.underlying_price:.2f}", "inline": True},
-        ]
-        if alert.estimated_premium >= 100_000:
+        if alert.alert_type == "ticker" and alert.grouped_contracts:
+            strikes = sorted(s.contract.strike for s in alert.grouped_contracts)
+            side_suffix = "C" if snap.contract.side == OptionSide.CALL else "P"
+            strike_range = f"{format_strike(strikes[0])}{side_suffix}-{format_strike(strikes[-1])}{side_suffix}"
+            total_volume = sum(s.volume for s in alert.grouped_contracts)
+            total_oi = sum(s.open_interest for s in alert.grouped_contracts)
+            ratio = None if total_oi <= 0 else total_volume / total_oi
+            fields = [
+                {"name": "Signal", "value": f"{len(alert.grouped_contracts)} contracts | {snap.contract.dte}DTE", "inline": True},
+                {"name": "Strike Range", "value": strike_range, "inline": True},
+                {"name": "Combined Volume", "value": f"{total_volume:,}", "inline": True},
+                {"name": "Combined OI", "value": f"{total_oi:,}", "inline": True},
+                {"name": "Combined Vol/OI", "value": "n/a" if ratio is None else f"{ratio:.2f}x", "inline": True},
+                {"name": "Underlying", "value": "n/a" if snap.underlying_price is None else f"${snap.underlying_price:.2f}", "inline": True},
+            ]
+        else:
+            fields = [
+                {"name": "Contract", "value": f"{snap.contract.display} | {snap.contract.dte}DTE", "inline": True},
+                {"name": "Volume / OI", "value": f"{snap.volume:,} / {snap.open_interest:,}", "inline": True},
+                {"name": "Vol/OI", "value": "n/a" if snap.vol_oi is None else f"{snap.vol_oi:.2f}x", "inline": True},
+                {"name": "New 5m Volume", "value": f"+{alert.volume_delta_5m:,}", "inline": True},
+                {"name": "Underlying", "value": "n/a" if snap.underlying_price is None else f"${snap.underlying_price:.2f}", "inline": True},
+            ]
+        if alert.alert_type == "contract" and alert.estimated_premium >= 100_000:
             fields.append({"name": "Estimated Activity", "value": f"${alert.estimated_premium:,.0f}", "inline": True})
-        if alert.grouped_contracts:
-            fields.append({"name": "Nearby Strikes", "value": "\n".join(s.contract.display.replace(f"{s.contract.symbol} ", "") for s in alert.grouped_contracts[:12]), "inline": False})
         fields.append({"name": "Reason", "value": "; ".join(alert.reasons[:4]), "inline": False})
         return {
             "username": "Unusual Options Scanner",
@@ -56,3 +69,7 @@ class DiscordNotifier:
                 "footer": {"text": "Market data alert only. Not a trade recommendation."},
             }],
         }
+
+
+def format_strike(value: float) -> str:
+    return str(int(value)) if value == int(value) else f"{value:g}"

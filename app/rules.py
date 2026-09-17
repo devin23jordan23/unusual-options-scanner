@@ -12,6 +12,11 @@ def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds
     score = 0
     reasons = []
 
+    # Require meaningful new activity; cumulative daily volume and low-OI ratios
+    # alone should not resurrect an old contract.
+    if volume_delta_5m < max(min_delta // 4, 1):
+        return None
+
     if snapshot.volume >= min_volume:
         score += 1
         reasons.append("volume above threshold")
