@@ -55,7 +55,7 @@ class DiscordNotifier:
                 {"name": "Vol/OI", "value": "n/a" if snap.vol_oi is None else f"{snap.vol_oi:.2f}x", "inline": True},
                 {"name": "Underlying", "value": "n/a" if snap.underlying_price is None else f"${snap.underlying_price:.2f}", "inline": True},
             ]
-        if alert.alert_type == "contract" and alert.estimated_premium >= 100_000:
+        if alert.alert_type == "contract":
             fields.append({"name": "Estimated Activity", "value": f"${alert.estimated_premium:,.0f}", "inline": True})
         fields.append({"name": "Reason", "value": "; ".join(alert.reasons[:4]), "inline": False})
         return {

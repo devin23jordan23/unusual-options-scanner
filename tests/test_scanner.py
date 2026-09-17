@@ -116,9 +116,17 @@ class ScannerUnitTests(unittest.TestCase):
     def test_contract_payload_hides_five_minute_volume(self):
         alert = evaluate_contract(snap(volume=6482, oi=903, mark=2.5), 2141, Thresholds())
         payload = DiscordNotifier("").payload(alert)
+        self.assertEqual(payload["embeds"][0]["title"], "Unusual CALL activity - NVDA")
         names = {field["name"] for field in payload["embeds"][0]["fields"]}
         self.assertNotIn("New 5m Volume", names)
         self.assertIn("Reason", names)
+        self.assertIn("Estimated Activity", names)
+
+    def test_estimated_activity_shows_below_large_threshold(self):
+        alert = evaluate_contract(snap(volume=500, oi=100, mark=1), 360, Thresholds(min_score=3))
+        payload = DiscordNotifier("").payload(alert)
+        activity = next(field for field in payload["embeds"][0]["fields"] if field["name"] == "Estimated Activity")
+        self.assertEqual(activity["value"], "$36,000")
 
     def test_symbol_specific_thresholds(self):
         settings = Settings(symbol_overrides={"SPY": Thresholds(min_volume=5000)})

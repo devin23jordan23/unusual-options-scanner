@@ -58,8 +58,9 @@ def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds
     if score < thresholds.min_score:
         return None
 
-    side_word = "call" if snapshot.contract.side == OptionSide.CALL else "put"
-    return Alert("contract", severity_for(score, premium, ratio, thresholds), f"Unusual {side_word} activity detected", snapshot, reasons, volume_delta_5m, premium)
+    side_word = "CALL" if snapshot.contract.side == OptionSide.CALL else "PUT"
+    title = f"Unusual {side_word} activity - {snapshot.contract.symbol}"
+    return Alert("contract", severity_for(score, premium, ratio, thresholds), title, snapshot, reasons, volume_delta_5m, premium)
 
 
 def has_long_dte_signal(snapshot: OptionSnapshot, premium: float, ratio: float | None, thresholds: Thresholds) -> bool:
