@@ -160,7 +160,8 @@ class SchwabClient:
             timeout=15,
         )
         if resp.status_code in (400, 401, 403):
-            raise RuntimeError("Schwab authorization URL is expired or invalid; sign in again and paste the new redirected URL")
+            detail = oauth_error_detail(resp)
+            raise RuntimeError(f"Schwab authorization exchange rejected ({resp.status_code}): {detail}")
         resp.raise_for_status()
         tokens = resp.json()
         self.save_tokens(tokens)
@@ -222,6 +223,14 @@ class SchwabClient:
 
 def expired(tokens: dict) -> bool:
     return time.time() > tokens.get("saved_at", 0) + tokens.get("expires_in", 1800) - 300
+
+
+def oauth_error_detail(response) -> str:
+    try:
+        payload = response.json()
+        return str(payload.get("error_description") or payload.get("error") or "authorization rejected")[:300]
+    except (TypeError, ValueError):
+        return "authorization rejected"
 
 
 def parse_expiration(exp_key: str):
