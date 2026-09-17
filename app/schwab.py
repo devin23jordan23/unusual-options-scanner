@@ -32,6 +32,8 @@ class SchwabClient:
         self.auth_callback_url = os.getenv("SCHWAB_AUTH_CALLBACK_URL", "")
         os.makedirs(settings.data_dir, exist_ok=True)
         self.token_file = os.path.join(settings.data_dir, "schwab_tokens.json")
+        if self.auth_callback_url and not os.path.exists(self.token_file):
+            self.exchange_callback_url(self.auth_callback_url)
 
     def option_snapshots(self, symbols: list[str]) -> list[OptionSnapshot]:
         out: list[OptionSnapshot] = []
