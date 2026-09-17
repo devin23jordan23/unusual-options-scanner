@@ -34,16 +34,18 @@ deploys or restarts.
 
 ## Schwab Authorization Without Telegram
 
-Mount a persistent Railway volume at `/app/data` before authorizing. After
-signing into Schwab, the browser redirects to `https://127.0.0.1/...` and may
-show a connection error. Copy that full browser address into this temporary
-Railway variable:
+Mount a persistent Railway volume at `/app/data` before authorizing. Generate a
+public Railway domain for the service, set a temporary strong
+`SCHWAB_AUTH_SETUP_KEY`, and deploy before starting the Schwab login. Then open:
 
 ```text
-SCHWAB_AUTH_CALLBACK_URL=https://127.0.0.1/?code=...
+https://YOUR-RAILWAY-DOMAIN/schwab-auth
 ```
 
-Deploy immediately. The scanner exchanges the one-time code and stores the
-result in `/app/data/schwab_tokens.json`. When the logs say authorization
-completed, delete `SCHWAB_AUTH_CALLBACK_URL` and redeploy. Never paste the
-callback URL into Discord, source control, or chat.
+Use the page's Schwab login link. After Schwab redirects to
+`https://127.0.0.1/?code=...`, immediately paste that complete address and the
+setup key into the already-running authorization page. No deployment occurs
+while the short-lived code is active. The scanner stores tokens in
+`/app/data/schwab_tokens.json`. Delete `SCHWAB_AUTH_SETUP_KEY` and any old
+`SCHWAB_AUTH_CALLBACK_URL` after success. Never paste the callback URL into
+Discord, source control, or chat.

@@ -19,9 +19,11 @@ class Scanner:
         if settings.mode == "mock":
             self.data = MockData(settings)
         else:
+            from .auth_server import start_auth_server
             from .schwab import SchwabClient
 
             self.data = SchwabClient(settings)
+            start_auth_server(self.data)
         self.discord = DiscordNotifier(settings.discord_webhook)
         self.rolling = RollingState()
         self.deduper = AlertDeduper(os.path.join(settings.data_dir, "alert_state.json"))

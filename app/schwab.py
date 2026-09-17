@@ -33,7 +33,10 @@ class SchwabClient:
         os.makedirs(settings.data_dir, exist_ok=True)
         self.token_file = os.path.join(settings.data_dir, "schwab_tokens.json")
         if self.auth_callback_url and not os.path.exists(self.token_file):
-            self.exchange_callback_url(self.auth_callback_url)
+            try:
+                self.exchange_callback_url(self.auth_callback_url)
+            except Exception as exc:
+                LOG.warning("Temporary Schwab callback variable failed: %s", exc)
 
     def option_snapshots(self, symbols: list[str]) -> list[OptionSnapshot]:
         out: list[OptionSnapshot] = []
@@ -117,8 +120,6 @@ class SchwabClient:
             if not tokens["access_token"] or expired(tokens):
                 return self.refresh_tokens(tokens)
             return tokens
-        if self.auth_callback_url:
-            return self.exchange_callback_url(self.auth_callback_url)
         return {}
 
     def save_tokens(self, tokens: dict) -> None:
