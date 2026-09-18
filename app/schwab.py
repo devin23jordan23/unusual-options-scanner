@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 from .config import Settings
-from .models import OptionContract, OptionSide, OptionSnapshot, StockSnapshot
+from .models import OptionContract, OptionSide, OptionSnapshot
 from .oauth import callback_code
 
 LOG = logging.getLogger(__name__)
@@ -45,21 +45,6 @@ class SchwabClient:
                 out.extend(self.option_snapshots_for_symbol(symbol))
             except Exception as exc:
                 LOG.warning("Schwab chain failed for %s: %s", symbol, exc)
-        return out
-
-    def stock_snapshots(self, symbols: list[str]) -> list[StockSnapshot]:
-        out: list[StockSnapshot] = []
-        now = datetime.now(ZoneInfo(self.settings.timezone))
-        for batch in chunks(symbols, 50):
-            try:
-                data = self.get("/quotes", {"symbols": ",".join(batch)})
-            except Exception as exc:
-                LOG.warning("Schwab quotes failed for %s: %s", ",".join(batch), exc)
-                continue
-            for symbol in batch:
-                snap = stock_snapshot_from_quote(symbol, data.get(symbol, {}), now)
-                if snap:
-                    out.append(snap)
         return out
 
     def option_snapshots_for_symbol(self, symbol: str) -> list[OptionSnapshot]:
@@ -282,46 +267,3 @@ def extract_underlying_price(data: dict) -> float | None:
         if value:
             return value
     return None
-
-
-def stock_snapshot_from_quote(symbol: str, raw: dict, now: datetime) -> StockSnapshot | None:
-    quote = raw.get("quote") or raw
-    price = first_num(
-        quote,
-        "lastPrice",
-        "mark",
-        "regularMarketLastPrice",
-        "closePrice",
-    )
-    volume = first_num(
-        quote,
-        "totalVolume",
-        "regularMarketTotalVolume",
-        "volume",
-    )
-    if price is None or volume is None:
-        return None
-    return StockSnapshot(
-        symbol=symbol,
-        price=price,
-        volume=int(volume),
-        timestamp=now,
-        open_price=first_num(quote, "openPrice", "regularMarketOpenPrice", "open"),
-        previous_close=first_num(quote, "closePrice", "regularMarketPreviousClose", "previousClose", "close"),
-        high_price=first_num(quote, "highPrice", "regularMarketDayHigh", "high"),
-        low_price=first_num(quote, "lowPrice", "regularMarketDayLow", "low"),
-        volatility=first_num(quote, "volatility"),
-    )
-
-
-def first_num(raw: dict, *keys: str) -> float | None:
-    for key in keys:
-        value = num(raw.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def chunks(items: list[str], size: int):
-    for idx in range(0, len(items), size):
-        yield items[idx:idx + size]

@@ -3,7 +3,7 @@ import os
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 
-from .models import Alert, OptionSnapshot, Severity, StockSnapshot
+from .models import Alert, OptionSnapshot, Severity
 
 
 @dataclass
@@ -43,64 +43,6 @@ class RollingState:
                 break
         baseline = baseline or q[0]
         return max(snapshot.volume - baseline.volume, 0)
-
-
-class RollingStockState:
-    def __init__(self, max_age_seconds: int = 900):
-        self.max_age_seconds = max_age_seconds
-        self.snapshots = defaultdict(deque)
-
-    def record(self, snapshot: StockSnapshot) -> None:
-        q = self.snapshots[snapshot.symbol]
-        q.append(snapshot)
-        cutoff = snapshot.timestamp.timestamp() - self.max_age_seconds
-        while q and q[0].timestamp.timestamp() < cutoff:
-            q.popleft()
-
-    def has_history(self, snapshot: StockSnapshot) -> bool:
-        return bool(self.snapshots.get(snapshot.symbol))
-
-    def volume_delta(self, snapshot: StockSnapshot, seconds: int = 300) -> int:
-        baseline = self.baseline(snapshot, seconds)
-        if baseline is None:
-            return 0
-        return max(snapshot.volume - baseline.volume, 0)
-
-    def price_change_pct(self, snapshot: StockSnapshot, seconds: int = 300) -> float | None:
-        baseline = self.baseline(snapshot, seconds)
-        if baseline is None or baseline.price <= 0:
-            return None
-        return (snapshot.price - baseline.price) / baseline.price * 100
-
-    def burst_ratio(self, snapshot: StockSnapshot, volume_delta: int, seconds: int = 300) -> float | None:
-        elapsed = market_elapsed_seconds(snapshot)
-        if elapsed is None or elapsed <= seconds or snapshot.volume <= 0:
-            return None
-        expected = snapshot.volume * (seconds / elapsed)
-        if expected <= 0:
-            return None
-        return volume_delta / expected
-
-    def baseline(self, snapshot: StockSnapshot, seconds: int) -> StockSnapshot | None:
-        q = self.snapshots.get(snapshot.symbol)
-        if not q:
-            return None
-        cutoff = snapshot.timestamp.timestamp() - seconds
-        baseline = None
-        for item in q:
-            if item.timestamp.timestamp() <= cutoff:
-                baseline = item
-            else:
-                break
-        return baseline or q[0]
-
-
-def market_elapsed_seconds(snapshot: StockSnapshot) -> float | None:
-    market_open = snapshot.timestamp.replace(hour=9, minute=30, second=0, microsecond=0)
-    elapsed = (snapshot.timestamp - market_open).total_seconds()
-    if elapsed <= 0:
-        return None
-    return elapsed
 
 
 class AlertDeduper:

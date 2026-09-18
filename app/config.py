@@ -46,25 +46,6 @@ class Thresholds:
 
 
 @dataclass(frozen=True)
-class UnderlyingVolumeThresholds:
-    enabled: bool = True
-    min_price: float = 5.0
-    max_price: float = 1_000.0
-    min_volume_today: int = 500_000
-    min_5m_volume: int = 100_000
-    min_5m_dollar_volume: float = 15_000_000
-    min_burst_ratio: float = 2.0
-    min_change_from_close_pct: float = 1.5
-    min_change_from_open_pct: float = 0.8
-    min_5m_price_change_pct: float = 0.45
-    min_day_range_pct: float = 1.2
-    high_range_position: float = 0.70
-    low_range_position: float = 0.30
-    min_score: int = 4
-    cooldown_seconds: int = 900
-
-
-@dataclass(frozen=True)
 class Settings:
     mode: str = "live"
     timezone: str = "America/New_York"
@@ -81,8 +62,11 @@ class Settings:
     cluster_max_strike_gap_pct: float = 0.025
     max_alerts_per_cycle: int = 3
     symbol_cooldown_seconds: int = 900
+    daily_report_enabled: bool = True
+    daily_report_hour: int = 16
+    daily_report_minute: int = 5
+    daily_report_top_count: int = 5
     thresholds: Thresholds = field(default_factory=Thresholds)
-    underlying_volume_thresholds: UnderlyingVolumeThresholds = field(default_factory=UnderlyingVolumeThresholds)
     symbol_overrides: dict[str, Thresholds] = field(default_factory=dict)
 
     @property
@@ -112,23 +96,6 @@ def load_settings() -> Settings:
         long_dte_min_volume=int(os.getenv("UOA_LONG_DTE_MIN_VOLUME", "250")),
         long_dte_min_vol_oi=float(os.getenv("UOA_LONG_DTE_MIN_VOL_OI", "2.0")),
         long_dte_min_premium=float(os.getenv("UOA_LONG_DTE_MIN_PREMIUM", "1000000")),
-    )
-    uvt = UnderlyingVolumeThresholds(
-        enabled=os.getenv("UVS_ENABLED", "true").lower() not in {"0", "false", "no"},
-        min_price=float(os.getenv("UVS_MIN_PRICE", "5")),
-        max_price=float(os.getenv("UVS_MAX_PRICE", "1000")),
-        min_volume_today=int(os.getenv("UVS_MIN_VOLUME_TODAY", "500000")),
-        min_5m_volume=int(os.getenv("UVS_MIN_5M_VOLUME", "100000")),
-        min_5m_dollar_volume=float(os.getenv("UVS_MIN_5M_DOLLAR_VOLUME", "15000000")),
-        min_burst_ratio=float(os.getenv("UVS_MIN_BURST_RATIO", "2.0")),
-        min_change_from_close_pct=float(os.getenv("UVS_MIN_CHANGE_FROM_CLOSE_PCT", "1.5")),
-        min_change_from_open_pct=float(os.getenv("UVS_MIN_CHANGE_FROM_OPEN_PCT", "0.8")),
-        min_5m_price_change_pct=float(os.getenv("UVS_MIN_5M_PRICE_CHANGE_PCT", "0.45")),
-        min_day_range_pct=float(os.getenv("UVS_MIN_DAY_RANGE_PCT", "1.2")),
-        high_range_position=float(os.getenv("UVS_HIGH_RANGE_POSITION", "0.70")),
-        low_range_position=float(os.getenv("UVS_LOW_RANGE_POSITION", "0.30")),
-        min_score=int(os.getenv("UVS_MIN_SCORE", "4")),
-        cooldown_seconds=int(os.getenv("UVS_COOLDOWN_SECONDS", "900")),
     )
     etf_t = replace(
         t,
@@ -170,7 +137,10 @@ def load_settings() -> Settings:
         cluster_max_strike_gap_pct=float(os.getenv("UOA_CLUSTER_MAX_STRIKE_GAP_PCT", "0.025")),
         max_alerts_per_cycle=int(os.getenv("UOA_MAX_ALERTS_PER_CYCLE", "3")),
         symbol_cooldown_seconds=int(os.getenv("UOA_SYMBOL_COOLDOWN_SECONDS", "900")),
+        daily_report_enabled=os.getenv("UOA_DAILY_REPORT_ENABLED", "true").lower() not in {"0", "false", "no"},
+        daily_report_hour=int(os.getenv("UOA_DAILY_REPORT_HOUR", "16")),
+        daily_report_minute=int(os.getenv("UOA_DAILY_REPORT_MINUTE", "5")),
+        daily_report_top_count=int(os.getenv("UOA_DAILY_REPORT_TOP_COUNT", "5")),
         thresholds=t,
-        underlying_volume_thresholds=uvt,
         symbol_overrides={**{symbol: etf_t for symbol in etfs}, "SPY": mega_etf_t, "QQQ": mega_etf_t},
     )
