@@ -17,13 +17,17 @@ This is not the old stock scanner and does not import it at runtime. Schwab auth
 - Scans 0DTE through 60DTE with stricter requirements for noisy ETFs and longer-dated flow
 - Focuses strikes near spot, with exceptional-volume escape hatch
 - Detects unusual volume, Vol/OI, large estimated premium, and 5-minute acceleration
+- Detects underlying stock-volume surges with price movement, intraday range expansion, and 5-minute burst ratios
 - Lets 30DTE-60DTE whale flow through when premium/Vol-OI is meaningful
 - Ranks individual contracts without emitting multi-strike cluster alerts
 - Suppresses duplicate alerts with cooldown and escalation rules
 - Warms up on the first snapshot, ranks candidates, and sends at most three distinct tickers per cycle
 - Compresses grouped strikes into one summary and applies a 15-minute ticker-wide cooldown
+- Sends a persistent top-calls/top-puts Discord report at 4:05 PM Eastern
 - Sends one Discord webhook embed destination
 - Supports mock mode for weekends/off-market testing
+
+See [`docs/UNDERLYING_VOLUME_SCANNER.md`](docs/UNDERLYING_VOLUME_SCANNER.md) for the underlying-volume model and tuning plan.
 
 ## Required Railway Variables
 
@@ -62,6 +66,19 @@ Temporary in-play names:
 
 ```text
 UOA_IN_PLAY=CRWD,SMCI
+```
+
+Underlying volume scanner knobs:
+
+```text
+UVS_ENABLED=true
+UVS_MIN_5M_VOLUME=100000
+UVS_MIN_5M_DOLLAR_VOLUME=15000000
+UVS_MIN_BURST_RATIO=2.0
+UVS_MIN_CHANGE_FROM_CLOSE_PCT=1.5
+UVS_MIN_CHANGE_FROM_OPEN_PCT=0.8
+UVS_MIN_5M_PRICE_CHANGE_PCT=0.45
+UVS_MIN_DAY_RANGE_PCT=1.2
 ```
 
 ## Tests

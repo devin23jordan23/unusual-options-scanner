@@ -52,6 +52,56 @@ class OptionSnapshot:
 
 
 @dataclass
+class StockSnapshot:
+    symbol: str
+    price: float
+    volume: int
+    timestamp: datetime
+    open_price: Optional[float] = None
+    previous_close: Optional[float] = None
+    high_price: Optional[float] = None
+    low_price: Optional[float] = None
+    volatility: Optional[float] = None
+
+    @property
+    def change_from_close_pct(self) -> Optional[float]:
+        if not self.previous_close or self.previous_close <= 0:
+            return None
+        return (self.price - self.previous_close) / self.previous_close * 100
+
+    @property
+    def change_from_open_pct(self) -> Optional[float]:
+        if not self.open_price or self.open_price <= 0:
+            return None
+        return (self.price - self.open_price) / self.open_price * 100
+
+    @property
+    def day_range_pct(self) -> Optional[float]:
+        if not self.high_price or not self.low_price or self.low_price <= 0:
+            return None
+        return (self.high_price - self.low_price) / self.low_price * 100
+
+    @property
+    def range_position(self) -> Optional[float]:
+        if not self.high_price or not self.low_price or self.high_price <= self.low_price:
+            return None
+        return (self.price - self.low_price) / (self.high_price - self.low_price)
+
+
+@dataclass
+class StockAlert:
+    alert_type: str
+    severity: Severity
+    title: str
+    snapshot: StockSnapshot
+    reasons: list[str]
+    volume_delta_5m: int = 0
+    dollar_volume_5m: float = 0
+    burst_ratio: Optional[float] = None
+    price_change_5m_pct: Optional[float] = None
+
+
+@dataclass
 class Alert:
     alert_type: str
     severity: Severity
@@ -84,4 +134,3 @@ class Alert:
         if ratio >= 2:
             return "unusual"
         return "normal"
-

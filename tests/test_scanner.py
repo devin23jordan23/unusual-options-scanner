@@ -5,13 +5,14 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.aggregation import ticker_level_alerts
-from app.config import Settings, Thresholds
+from app.config import Settings, Thresholds, UnderlyingVolumeThresholds
 from app.discord import DiscordNotifier
+from app.daily_report import DailyOptionsReport
 from app.metrics import estimated_premium, volume_oi_ratio
-from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
-from app.rules import evaluate_contract
+from app.models import OptionContract, OptionSide, OptionSnapshot, Severity, StockSnapshot
+from app.rules import evaluate_contract, evaluate_underlying_volume
 from app.scanner import strongest_distinct_tickers
-from app.state import AlertDeduper, RollingState
+from app.state import AlertDeduper, RollingState, RollingStockState
 from app.oauth import callback_code
 
 
@@ -21,7 +22,44 @@ def snap(symbol="NVDA", strike=195.0, side=OptionSide.CALL, volume=2500, oi=700,
     return OptionSnapshot(contract, volume, oi, mark, 193.86, ts)
 
 
+def stock_snap(symbol="COIN", price=318.0, volume=3_100_000, ts=None):
+    ts = ts or datetime(2026, 9, 11, 10, 7, tzinfo=ZoneInfo("America/New_York"))
+    return StockSnapshot(
+        symbol=symbol,
+        price=price,
+        volume=volume,
+        timestamp=ts,
+        open_price=300.0,
+        previous_close=298.0,
+        high_price=319.0,
+        low_price=298.5,
+    )
+
+
 class ScannerUnitTests(unittest.TestCase):
+    def test_daily_report_keeps_major_flow_and_excludes_watch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)
+            major = evaluate_contract(snap(symbol="AMD", volume=6482, oi=903, mark=2.5), 2141, Thresholds())
+            watch = evaluate_contract(snap(symbol="MU", volume=500, oi=100, mark=0.25), 125, Thresholds(min_score=3))
+            self.assertIsNotNone(major)
+            self.assertEqual(watch.severity, Severity.WATCH)
+            report.record(major)
+            report.record(watch)
+            self.assertEqual(len(report.contracts), 1)
+
+    def test_daily_report_due_and_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)
+            alert = evaluate_contract(snap(symbol="AMD", volume=6482, oi=903, mark=2.5), 2141, Thresholds())
+            report.record(alert)
+            now = datetime(2026, 9, 11, 16, 5, tzinfo=ZoneInfo("America/New_York"))
+            self.assertTrue(report.is_due(now))
+            payload = report.payload(now)
+            self.assertIn("AMD", payload["embeds"][0]["fields"][0]["value"])
+            report.mark_sent(now)
+            self.assertFalse(report.is_due(now))
+
     def test_schwab_callback_code_extraction(self):
         url = "https://127.0.0.1/?code=sample%40code&session=abc"
         self.assertEqual(callback_code(url), "sample@code")
@@ -132,6 +170,61 @@ class ScannerUnitTests(unittest.TestCase):
         settings = Settings(symbol_overrides={"SPY": Thresholds(min_volume=5000)})
         self.assertEqual(settings.thresholds_for("SPY").min_volume, 5000)
         self.assertEqual(settings.thresholds_for("NVDA").min_volume, 500)
+
+    def test_underlying_volume_alert_requires_move_and_fresh_volume(self):
+        alert = evaluate_underlying_volume(
+            stock_snap(),
+            volume_delta_5m=700_000,
+            price_change_5m_pct=1.2,
+            burst_ratio=3.0,
+            thresholds=UnderlyingVolumeThresholds(),
+        )
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.severity, Severity.EXTREME)
+        self.assertIn("volume burst versus today's pace", alert.reasons)
+
+    def test_underlying_volume_suppresses_always_busy_names_without_burst(self):
+        alert = evaluate_underlying_volume(
+            stock_snap(symbol="AAPL", price=240, volume=35_000_000),
+            volume_delta_5m=50_000,
+            price_change_5m_pct=0.05,
+            burst_ratio=0.7,
+            thresholds=UnderlyingVolumeThresholds(),
+        )
+        self.assertIsNone(alert)
+
+    def test_rolling_stock_state_calculates_volume_price_and_burst(self):
+        state = RollingStockState()
+        early = stock_snap(price=304, volume=1_250_000, ts=datetime(2026, 9, 11, 10, 2, tzinfo=ZoneInfo("America/New_York")))
+        late = stock_snap(price=318, volume=3_100_000, ts=datetime(2026, 9, 11, 10, 7, tzinfo=ZoneInfo("America/New_York")))
+        state.record(early)
+        self.assertTrue(state.has_history(late))
+        state.record(late)
+        self.assertEqual(state.volume_delta(late, 300), 1_850_000)
+        self.assertAlmostEqual(state.price_change_pct(late, 300), 4.605263, places=5)
+        self.assertGreater(state.burst_ratio(late, 1_850_000, 300), 4)
+
+    def test_underlying_payload_contains_volume_speed_fields(self):
+        alert = evaluate_underlying_volume(
+            stock_snap(),
+            volume_delta_5m=700_000,
+            price_change_5m_pct=1.2,
+            burst_ratio=3.0,
+            thresholds=UnderlyingVolumeThresholds(),
+        )
+        payload = DiscordNotifier("").payload(alert)
+        names = {field["name"] for field in payload["embeds"][0]["fields"]}
+        self.assertIn("5m Volume", names)
+        self.assertIn("5m Dollar Volume", names)
+        self.assertIn("Burst Ratio", names)
+
+    def test_alert_selection_deduplicates_underlying_and_options_by_symbol(self):
+        stock = evaluate_underlying_volume(stock_snap(), 700_000, 1.2, 3.0, UnderlyingVolumeThresholds())
+        option = evaluate_contract(snap(symbol="COIN", volume=7000, oi=500, mark=3), 4000, Thresholds())
+        tsla = evaluate_contract(snap(symbol="TSLA", volume=5000, oi=500, mark=2), 2500, Thresholds())
+        selected = strongest_distinct_tickers([option, stock, tsla], 3)
+        self.assertEqual(len(selected), 2)
+        self.assertEqual({a.snapshot.symbol if a.alert_type == "underlying" else a.snapshot.contract.symbol for a in selected}, {"COIN", "TSLA"})
 
 
 if __name__ == "__main__":
