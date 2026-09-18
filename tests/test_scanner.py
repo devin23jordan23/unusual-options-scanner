@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 from app.aggregation import ticker_level_alerts
 from app.config import Settings, Thresholds, UnderlyingVolumeThresholds
 from app.discord import DiscordNotifier
-from app.daily_report import DailyOptionsReport
 from app.metrics import estimated_premium, volume_oi_ratio
 from app.models import OptionContract, OptionSide, OptionSnapshot, Severity, StockSnapshot
 from app.rules import evaluate_contract, evaluate_underlying_volume
@@ -37,29 +36,6 @@ def stock_snap(symbol="COIN", price=318.0, volume=3_100_000, ts=None):
 
 
 class ScannerUnitTests(unittest.TestCase):
-    def test_daily_report_keeps_major_flow_and_excludes_watch(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)
-            major = evaluate_contract(snap(symbol="AMD", volume=6482, oi=903, mark=2.5), 2141, Thresholds())
-            watch = evaluate_contract(snap(symbol="MU", volume=500, oi=100, mark=0.25), 125, Thresholds(min_score=3))
-            self.assertIsNotNone(major)
-            self.assertEqual(watch.severity, Severity.WATCH)
-            report.record(major)
-            report.record(watch)
-            self.assertEqual(len(report.contracts), 1)
-
-    def test_daily_report_due_and_payload(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)
-            alert = evaluate_contract(snap(symbol="AMD", volume=6482, oi=903, mark=2.5), 2141, Thresholds())
-            report.record(alert)
-            now = datetime(2026, 9, 11, 16, 5, tzinfo=ZoneInfo("America/New_York"))
-            self.assertTrue(report.is_due(now))
-            payload = report.payload(now)
-            self.assertIn("AMD", payload["embeds"][0]["fields"][0]["value"])
-            report.mark_sent(now)
-            self.assertFalse(report.is_due(now))
-
     def test_schwab_callback_code_extraction(self):
         url = "https://127.0.0.1/?code=sample%40code&session=abc"
         self.assertEqual(callback_code(url), "sample@code")

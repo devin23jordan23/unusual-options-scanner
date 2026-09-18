@@ -1,11 +1,8 @@
 import logging
 import os
 import time
-from datetime import datetime, time as clock_time
-from zoneinfo import ZoneInfo
 
 from .config import Settings
-from .daily_report import DailyOptionsReport
 from .discord import DiscordNotifier
 from .market_hours import is_market_open
 from .mock import MockData
@@ -30,21 +27,12 @@ class Scanner:
         self.rolling = RollingState()
         self.rolling_stocks = RollingStockState()
         self.deduper = AlertDeduper(os.path.join(settings.data_dir, "alert_state.json"))
-        self.daily_report = DailyOptionsReport(
-            os.path.join(settings.data_dir, "daily_options_report.json"),
-            settings.daily_report_top_count,
-            clock_time(settings.daily_report_hour, settings.daily_report_minute),
-        )
 
     def run(self) -> None:
         LOG.info("scanner started mode=%s universe=%s", self.settings.mode, ",".join(self.settings.active_universe))
         cycle = 0
         while True:
             cycle += 1
-            now = datetime.now(ZoneInfo(self.settings.timezone))
-            if self.settings.mode != "mock" and self.settings.daily_report_enabled and self.daily_report.is_due(now):
-                if self.discord.send_payload(self.daily_report.payload(now), "daily options flow report"):
-                    self.daily_report.mark_sent(now)
             if self.settings.mode != "mock" and not is_market_open(self.settings.timezone):
                 LOG.info("market closed; sleeping")
                 time.sleep(min(self.settings.poll_seconds, 300))
@@ -88,7 +76,6 @@ class Scanner:
             alert = evaluate_contract(snap, delta, self.settings.thresholds_for(snap.contract.symbol))
             if not alert:
                 continue
-            self.daily_report.record(alert)
             cooldown = self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
             if self.deduper.should_send_contract(alert, cooldown):
                 candidates.append(alert)

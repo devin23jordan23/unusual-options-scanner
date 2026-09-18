@@ -81,10 +81,6 @@ class Settings:
     cluster_max_strike_gap_pct: float = 0.025
     max_alerts_per_cycle: int = 3
     symbol_cooldown_seconds: int = 900
-    daily_report_enabled: bool = True
-    daily_report_hour: int = 16
-    daily_report_minute: int = 5
-    daily_report_top_count: int = 5
     thresholds: Thresholds = field(default_factory=Thresholds)
     underlying_volume_thresholds: UnderlyingVolumeThresholds = field(default_factory=UnderlyingVolumeThresholds)
     symbol_overrides: dict[str, Thresholds] = field(default_factory=dict)
@@ -174,10 +170,6 @@ def load_settings() -> Settings:
         cluster_max_strike_gap_pct=float(os.getenv("UOA_CLUSTER_MAX_STRIKE_GAP_PCT", "0.025")),
         max_alerts_per_cycle=int(os.getenv("UOA_MAX_ALERTS_PER_CYCLE", "3")),
         symbol_cooldown_seconds=int(os.getenv("UOA_SYMBOL_COOLDOWN_SECONDS", "900")),
-        daily_report_enabled=os.getenv("UOA_DAILY_REPORT_ENABLED", "true").lower() not in {"0", "false", "no"},
-        daily_report_hour=int(os.getenv("UOA_DAILY_REPORT_HOUR", "16")),
-        daily_report_minute=int(os.getenv("UOA_DAILY_REPORT_MINUTE", "5")),
-        daily_report_top_count=int(os.getenv("UOA_DAILY_REPORT_TOP_COUNT", "5")),
         thresholds=t,
         underlying_volume_thresholds=uvt,
         symbol_overrides={**{symbol: etf_t for symbol in etfs}, "SPY": mega_etf_t, "QQQ": mega_etf_t},

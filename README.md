@@ -23,7 +23,6 @@ This is not the old stock scanner and does not import it at runtime. Schwab auth
 - Suppresses duplicate alerts with cooldown and escalation rules
 - Warms up on the first snapshot, ranks candidates, and sends at most three distinct tickers per cycle
 - Compresses grouped strikes into one summary and applies a 15-minute ticker-wide cooldown
-- Sends a persistent top-calls/top-puts Discord report at 4:05 PM Eastern
 - Sends one Discord webhook embed destination
 - Supports mock mode for weekends/off-market testing
 
