@@ -5,11 +5,12 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from app.aggregation import ticker_level_alerts
-from app.config import Settings, Thresholds
+from app.config import LottoSettings, Settings, Thresholds
 from app.discord import DiscordNotifier
 from app.daily_report import DailyOptionsReport
 from app.metrics import estimated_premium, volume_oi_ratio
-from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
+from app.models import MarketSnapshot, OptionContract, OptionSide, OptionSnapshot, Severity
+from app.lotto import evaluate_lotto
 from app.rules import evaluate_contract
 from app.scanner import strongest_distinct_tickers
 from app.state import AlertDeduper, RollingState
@@ -156,6 +157,42 @@ class ScannerUnitTests(unittest.TestCase):
         settings = Settings(symbol_overrides={"SPY": Thresholds(min_volume=5000)})
         self.assertEqual(settings.thresholds_for("SPY").min_volume, 5000)
         self.assertEqual(settings.thresholds_for("NVDA").min_volume, 500)
+
+
+    def test_lotto_alert_requires_directional_confirmation(self):
+        base = evaluate_contract(snap(symbol="NVDA", volume=5000, oi=500, mark=1.25), 1800, Thresholds())
+        ts = base.snapshot.timestamp
+        quotes = {
+            "NVDA": MarketSnapshot("NVDA", 193.86, 10_000_000, 1.20, ts),
+            "SMH": MarketSnapshot("SMH", 330.0, 5_000_000, 0.80, ts),
+            "QQQ": MarketSnapshot("QQQ", 590.0, 20_000_000, 0.40, ts),
+        }
+        alert = evaluate_lotto(base, quotes, 150_000, LottoSettings(min_score=72))
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.alert_type, "lotto")
+        self.assertGreaterEqual(alert.lotto_score, 72)
+        self.assertIn("Lotto Score", alert.context_fields)
+
+    def test_lotto_suppresses_unconfirmed_flow(self):
+        base = evaluate_contract(snap(symbol="NVDA", volume=5000, oi=500, mark=1.25), 1800, Thresholds())
+        ts = base.snapshot.timestamp
+        quotes = {
+            "NVDA": MarketSnapshot("NVDA", 193.86, 10_000_000, -0.80, ts),
+            "SMH": MarketSnapshot("SMH", 330.0, 5_000_000, -0.50, ts),
+            "QQQ": MarketSnapshot("QQQ", 590.0, 20_000_000, -0.30, ts),
+        }
+        alert = evaluate_lotto(base, quotes, 0, LottoSettings(min_score=72))
+        self.assertIsNone(alert)
+
+    def test_lotto_rejects_far_otm_contract(self):
+        base = evaluate_contract(snap(symbol="NVDA", strike=220, volume=5000, oi=500, mark=0.50), 1800, Thresholds())
+        ts = base.snapshot.timestamp
+        quotes = {
+            "NVDA": MarketSnapshot("NVDA", 193.86, 10_000_000, 2.00, ts),
+            "SMH": MarketSnapshot("SMH", 330.0, 5_000_000, 1.00, ts),
+            "QQQ": MarketSnapshot("QQQ", 590.0, 20_000_000, 0.50, ts),
+        }
+        self.assertIsNone(evaluate_lotto(base, quotes, 200_000, LottoSettings()))
 
 
 if __name__ == "__main__":
