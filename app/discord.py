@@ -37,7 +37,7 @@ class DiscordNotifier:
         snap = alert.snapshot
         color = 0x2ECC71 if snap.contract.side == OptionSide.CALL else 0xE74C3C
         if alert.severity.value == "EXTREME":
-            color = 0xF1C40F
+            color = 0x3498DB
         if alert.alert_type == "ticker" and alert.grouped_contracts:
             strikes = sorted(s.contract.strike for s in alert.grouped_contracts)
             side_suffix = "C" if snap.contract.side == OptionSide.CALL else "P"
@@ -62,7 +62,6 @@ class DiscordNotifier:
             ]
         if alert.alert_type == "contract":
             fields.append({"name": "Estimated Activity", "value": f"${alert.estimated_premium:,.0f}", "inline": True})
-        fields.append({"name": "Reason", "value": "; ".join(alert.reasons[:4]), "inline": False})
         return {
             "username": "Unusual Options Scanner",
             "embeds": [{
