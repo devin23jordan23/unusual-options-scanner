@@ -46,6 +46,25 @@ class Thresholds:
 
 
 @dataclass(frozen=True)
+class LottoSettings:
+    enabled: bool = True
+    min_score: int = 72
+    max_dte: int = 7
+    max_otm_pct: float = 0.04
+    max_mark: float = 5.00
+    min_abs_delta: float = 0.15
+    max_abs_delta: float = 0.60
+    max_spread_pct: float = 0.30
+    min_contract_volume: int = 750
+    min_5m_volume: int = 400
+    min_vol_oi: float = 1.5
+    stock_move_confirm_pct: float = 0.35
+    sector_move_confirm_pct: float = 0.15
+    market_move_confirm_pct: float = 0.10
+    alert_cooldown_seconds: int = 900
+
+
+@dataclass(frozen=True)
 class Settings:
     mode: str = "live"
     timezone: str = "America/New_York"
@@ -66,6 +85,7 @@ class Settings:
     daily_report_hour: int = 16
     daily_report_minute: int = 5
     daily_report_top_count: int = 5
+    lotto: LottoSettings = field(default_factory=LottoSettings)
     thresholds: Thresholds = field(default_factory=Thresholds)
     symbol_overrides: dict[str, Thresholds] = field(default_factory=dict)
 
@@ -78,6 +98,23 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    lotto = LottoSettings(
+        enabled=os.getenv("LOTTO_ENABLED", "true").lower() not in {"0", "false", "no"},
+        min_score=int(os.getenv("LOTTO_MIN_SCORE", "72")),
+        max_dte=int(os.getenv("LOTTO_MAX_DTE", "7")),
+        max_otm_pct=float(os.getenv("LOTTO_MAX_OTM_PCT", "0.04")),
+        max_mark=float(os.getenv("LOTTO_MAX_MARK", "5.00")),
+        min_abs_delta=float(os.getenv("LOTTO_MIN_ABS_DELTA", "0.15")),
+        max_abs_delta=float(os.getenv("LOTTO_MAX_ABS_DELTA", "0.60")),
+        max_spread_pct=float(os.getenv("LOTTO_MAX_SPREAD_PCT", "0.30")),
+        min_contract_volume=int(os.getenv("LOTTO_MIN_CONTRACT_VOLUME", "750")),
+        min_5m_volume=int(os.getenv("LOTTO_MIN_5M_VOLUME", "400")),
+        min_vol_oi=float(os.getenv("LOTTO_MIN_VOL_OI", "1.5")),
+        stock_move_confirm_pct=float(os.getenv("LOTTO_STOCK_MOVE_CONFIRM_PCT", "0.35")),
+        sector_move_confirm_pct=float(os.getenv("LOTTO_SECTOR_MOVE_CONFIRM_PCT", "0.15")),
+        market_move_confirm_pct=float(os.getenv("LOTTO_MARKET_MOVE_CONFIRM_PCT", "0.10")),
+        alert_cooldown_seconds=int(os.getenv("LOTTO_ALERT_COOLDOWN_SECONDS", "900")),
+    )
     t = Thresholds(
         min_volume=int(os.getenv("UOA_MIN_VOLUME", "500")),
         min_volume_0dte=int(os.getenv("UOA_MIN_VOLUME_0DTE", "350")),
@@ -141,6 +178,7 @@ def load_settings() -> Settings:
         daily_report_hour=int(os.getenv("UOA_DAILY_REPORT_HOUR", "16")),
         daily_report_minute=int(os.getenv("UOA_DAILY_REPORT_MINUTE", "5")),
         daily_report_top_count=int(os.getenv("UOA_DAILY_REPORT_TOP_COUNT", "5")),
+        lotto=lotto,
         thresholds=t,
         symbol_overrides={**{symbol: etf_t for symbol in etfs}, "SPY": mega_etf_t, "QQQ": mega_etf_t},
     )
