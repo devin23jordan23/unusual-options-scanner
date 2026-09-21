@@ -102,6 +102,7 @@ class ScannerUnitTests(unittest.TestCase):
     def test_severity_escalation(self):
         alert = evaluate_contract(snap(volume=10000, oi=500, mark=3), 8000, Thresholds())
         self.assertEqual(alert.severity, Severity.EXTREME)
+        self.assertEqual(DiscordNotifier("").payload(alert)["embeds"][0]["color"], 0x3498DB)
 
     def test_rolling_5m_acceleration(self):
         state = RollingState()
@@ -143,7 +144,7 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertEqual(payload["embeds"][0]["title"], "Unusual CALL activity - NVDA")
         names = {field["name"] for field in payload["embeds"][0]["fields"]}
         self.assertNotIn("New 5m Volume", names)
-        self.assertIn("Reason", names)
+        self.assertNotIn("Reason", names)
         self.assertIn("Estimated Activity", names)
 
     def test_estimated_activity_shows_below_large_threshold(self):
