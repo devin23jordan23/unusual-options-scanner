@@ -77,6 +77,17 @@ def evaluate_lotto(
     market = quotes.get(market_symbol)
     market_move = direction * ((market.percent_change or 0.0) if market else 0.0)
 
+    # A lotto candidate must have real tape confirmation, not just an explosive
+    # options print. This intentionally makes the first market-context sample a warmup.
+    if stock_move <= 0 or underlying_volume_5m <= 0:
+        return None
+    confirmations = [
+        move for source, move in ((sector, sector_move), (market, market_move))
+        if source is not None and source.percent_change is not None
+    ]
+    if confirmations and max(confirmations) <= 0:
+        return None
+
     score = 0
     reasons = []
 
@@ -160,7 +171,7 @@ def evaluate_lotto(
         base_alert,
         alert_type="lotto",
         severity=Severity.EXTREME if score >= 88 else Severity.HIGH,
-        title=f"LOTTO WATCH {side} - {contract.symbol} {contract.display}",
+        title=f"LOTTO WATCH {side} - {contract.display}",
         reasons=reasons,
         lotto_score=min(score, 100),
         context_fields=context,
