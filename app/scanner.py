@@ -98,7 +98,7 @@ class Scanner:
         for alert in selected:
             if self.discord.send(alert):
                 self.deduper.mark_ticker(ticker_dedupe_key(alert), now_ts)
-                if alert.alert_type == "contract":
+                if alert.alert_type in {"contract", "lotto"}:
                     self.deduper.mark_contract(alert)
         LOG.info(
             "scan complete option_snapshots=%s qualified=%s selected=%s",
