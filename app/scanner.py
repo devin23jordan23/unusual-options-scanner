@@ -7,10 +7,11 @@ from zoneinfo import ZoneInfo
 from .config import Settings
 from .daily_report import DailyOptionsReport
 from .discord import DiscordNotifier
+from .lotto import context_symbols, evaluate_lotto
 from .market_hours import is_market_open
 from .mock import MockData
 from .rules import evaluate_contract
-from .state import AlertDeduper, RollingState, severity_rank
+from .state import AlertDeduper, MarketRollingState, RollingState, severity_rank
 
 LOG = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class Scanner:
             start_auth_server(self.data)
         self.discord = DiscordNotifier(settings.discord_webhook)
         self.rolling = RollingState()
+        self.market_rolling = MarketRollingState()
         self.deduper = AlertDeduper(os.path.join(settings.data_dir, "alert_state.json"))
         self.daily_report = DailyOptionsReport(
             os.path.join(settings.data_dir, "daily_options_report.json"),
@@ -56,6 +58,8 @@ class Scanner:
 
     def run_once(self) -> None:
         candidates = []
+        market_context = self.data.market_snapshots(context_symbols(self.settings.active_universe))
+        self.market_rolling.record_many(market_context)
         snapshots = self.data.option_snapshots(self.settings.active_universe)
         for snap in snapshots:
             has_history = self.rolling.has_history(snap)
@@ -67,9 +71,20 @@ class Scanner:
             if not alert:
                 continue
             self.daily_report.record(alert)
-            cooldown = self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
-            if self.deduper.should_send_contract(alert, cooldown):
-                candidates.append(alert)
+            lotto = evaluate_lotto(
+                alert,
+                market_context,
+                self.market_rolling.volume_delta(snap.contract.symbol, 300),
+                self.settings.lotto,
+            )
+            candidate = lotto or alert
+            cooldown = (
+                self.settings.lotto.alert_cooldown_seconds
+                if candidate.alert_type == "lotto"
+                else self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
+            )
+            if self.deduper.should_send_contract(candidate, cooldown):
+                candidates.append(candidate)
         now_ts = time.time()
         eligible = [
             alert for alert in candidates
@@ -111,7 +126,7 @@ def strongest_distinct_tickers(alerts, limit: int):
 def alert_rank(alert):
     return (
         severity_rank(alert.severity.value),
-        1 if alert.alert_type == "ticker" else 0,
+        2 if alert.alert_type == "lotto" else 1 if alert.alert_type == "ticker" else 0,
         alert.volume_delta_5m,
         alert.estimated_premium,
         alert.snapshot.vol_oi or 0,
@@ -119,8 +134,11 @@ def alert_rank(alert):
 
 
 def ticker_dedupe_key(alert) -> str:
-    return f"{alert.snapshot.contract.symbol}:ALL"
+    suffix = "LOTTO" if alert.alert_type == "lotto" else "ALL"
+    return f"{alert.snapshot.contract.symbol}:{suffix}"
 
 
 def ticker_cooldown(alert, settings: Settings) -> int:
+    if alert.alert_type == "lotto":
+        return settings.lotto.alert_cooldown_seconds
     return settings.symbol_cooldown_seconds
