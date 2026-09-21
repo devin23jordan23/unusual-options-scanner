@@ -3,7 +3,7 @@ import os
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 
-from .models import Alert, OptionSnapshot, Severity
+from .models import Alert, MarketSnapshot, OptionSnapshot, Severity
 
 
 @dataclass
@@ -43,6 +43,42 @@ class RollingState:
                 break
         baseline = baseline or q[0]
         return max(snapshot.volume - baseline.volume, 0)
+
+
+class MarketRollingState:
+    def __init__(self, max_age_seconds: int = 900):
+        self.max_age_seconds = max_age_seconds
+        self.snapshots = defaultdict(deque)
+
+    def record_many(self, snapshots: dict[str, MarketSnapshot]) -> None:
+        for snapshot in snapshots.values():
+            self.record(snapshot)
+
+    def record(self, snapshot: MarketSnapshot) -> None:
+        q = self.snapshots[snapshot.symbol]
+        q.append(snapshot)
+        cutoff = snapshot.timestamp.timestamp() - self.max_age_seconds
+        while q and q[0].timestamp.timestamp() < cutoff:
+            q.popleft()
+
+    def volume_delta(self, symbol: str, seconds: int = 300) -> int:
+        q = self.snapshots.get(symbol)
+        if not q:
+            return 0
+        latest = q[-1]
+        cutoff = latest.timestamp.timestamp() - seconds
+        baseline = None
+        for item in q:
+            if item.timestamp.timestamp() <= cutoff:
+                baseline = item
+            else:
+                break
+        baseline = baseline or q[0]
+        return max(latest.total_volume - baseline.total_volume, 0)
+
+    def has_history(self, symbol: str) -> bool:
+        q = self.snapshots.get(symbol)
+        return bool(q and len(q) > 1)
 
 
 class AlertDeduper:
