@@ -77,7 +77,15 @@ The 8:45 AM ET pre-market brief is a separate Railway cron service. It uses Open
 search to generate the report and posts the finished Markdown to Discord. It
 does not use Schwab.
 
-Use `railway.premarket.json` as the service's Railway config file and set:
+Configure the service directly in Railway with:
+
+```text
+Start command: python -m app.premarket
+Cron schedule: 45 12,13 * * 1-5
+Restart policy: Never
+```
+
+Set these service variables:
 
 ```text
 OPENAI_API_KEY=
