@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 from .config import Settings
-from .models import OptionContract, OptionSide, OptionSnapshot
+from .models import MarketSnapshot, OptionContract, OptionSide, OptionSnapshot
 from .oauth import callback_code
 
 LOG = logging.getLogger(__name__)
@@ -72,6 +72,37 @@ class SchwabClient:
         data = self.get("/quotes", {"symbols": symbol})
         quote = data.get(symbol, {}).get("quote", {})
         return num(quote.get("lastPrice") or quote.get("mark") or quote.get("closePrice"))
+
+    def market_snapshots(self, symbols: list[str]) -> dict[str, MarketSnapshot]:
+        now = datetime.now(ZoneInfo(self.settings.timezone))
+        out: dict[str, MarketSnapshot] = {}
+        unique = sorted({s.upper() for s in symbols if s})
+        for start in range(0, len(unique), 50):
+            batch = unique[start:start + 50]
+            try:
+                data = self.get("/quotes", {"symbols": ",".join(batch)})
+            except Exception as exc:
+                LOG.warning("Schwab quote context failed for batch %s: %s", ",".join(batch), exc)
+                continue
+            for symbol in batch:
+                raw = data.get(symbol, {})
+                quote = raw.get("quote", {}) or {}
+                reference = raw.get("reference", {}) or {}
+                price = num(quote.get("lastPrice") or quote.get("mark") or quote.get("closePrice"))
+                if price is None:
+                    continue
+                pct = first_num(
+                    quote.get("netPercentChange"),
+                    quote.get("regularMarketPercentChange"),
+                    quote.get("netPercentChangeInDouble"),
+                )
+                if pct is None:
+                    close = first_num(quote.get("closePrice"), reference.get("previousClose"))
+                    if close:
+                        pct = ((price - close) / close) * 100
+                volume = int(first_num(quote.get("totalVolume"), quote.get("regularMarketVolume"), 0) or 0)
+                out[symbol] = MarketSnapshot(symbol, price, volume, pct, now)
+        return out
 
     def get(self, endpoint: str, params: dict | None = None) -> dict:
         for attempt in range(2):
@@ -266,4 +297,12 @@ def extract_underlying_price(data: dict) -> float | None:
         value = num(underlying.get(key))
         if value:
             return value
+    return None
+
+
+def first_num(*values) -> float | None:
+    for value in values:
+        parsed = num(value)
+        if parsed is not None:
+            return parsed
     return None
