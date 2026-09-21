@@ -32,6 +32,24 @@ Those JSON files are ignored by git. On Railway, set `SCHWAB_REFRESH_TOKEN`
 so the scanner can refresh its access token and pull Schwab market data after
 deploys or restarts.
 
+## Separate Pre-Market Brief Cron Service
+
+Create a second service from this same GitHub repository. In its service
+settings, set the config file path to `/railway.premarket.json`. The config
+runs `python -m app.premarket` at `45 12,13 * * 1-5`; the application checks
+Eastern time and exits without sending on the extra daylight-saving-time run.
+
+Required variables for only this service:
+
+```text
+OPENAI_API_KEY=
+DISCORD_PREMARKET_WEBHOOK=
+PREMARKET_TIMEZONE=America/New_York
+```
+
+The Discord variable may use the same webhook as the options scanner. Keep the
+OpenAI key in Railway variables and never commit it to the repository.
+
 ## Schwab Authorization Without Telegram
 
 Mount a persistent Railway volume at `/app/data` before authorizing. Generate a

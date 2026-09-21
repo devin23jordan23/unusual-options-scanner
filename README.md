@@ -71,6 +71,28 @@ UOA_IN_PLAY=CRWD,SMCI
 python -m unittest discover -s tests
 ```
 
+## Pre-Market Brief Service
+
+The 8:45 AM ET pre-market brief is a separate Railway cron service. It uses OpenAI web
+search to generate the report and posts the finished Markdown to Discord. It
+does not use Schwab.
+
+Use `railway.premarket.json` as the service's Railway config file and set:
+
+```text
+OPENAI_API_KEY=
+DISCORD_PREMARKET_WEBHOOK=
+PREMARKET_TIMEZONE=America/New_York
+```
+
+The service runs at both possible UTC equivalents of 8:45 AM Eastern and the
+application's timezone guard allows only the correct run to publish. To test a
+deployment manually, override the start command temporarily or run:
+
+```bash
+python -m app.premarket --force
+```
+
 ## Schwab Limitation
 
 V1 uses Schwab REST option-chain data. It does not reconstruct exchange sweeps and does not scan the entire US options universe. If Schwab streaming `LEVELONE_OPTIONS` or option screener access is added later, it can replace the data adapter without rewriting the scanner rules.
