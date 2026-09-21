@@ -60,17 +60,25 @@ class DiscordNotifier:
                 {"name": "Vol/OI", "value": "n/a" if snap.vol_oi is None else f"{snap.vol_oi:.2f}x", "inline": True},
                 {"name": "Underlying", "value": "n/a" if snap.underlying_price is None else f"${snap.underlying_price:.2f}", "inline": True},
             ]
-        if alert.alert_type == "contract":
+        if alert.alert_type in {"contract", "lotto"}:
             fields.append({"name": "Estimated Activity", "value": f"${alert.estimated_premium:,.0f}", "inline": True})
+        if alert.alert_type == "lotto":
+            fields.append({"name": "Option Mark", "value": f"${snap.mark:.2f}", "inline": True})
+            if snap.delta is not None:
+                fields.append({"name": "Delta", "value": f"{snap.delta:.2f}", "inline": True})
+            if snap.gamma is not None:
+                fields.append({"name": "Gamma", "value": f"{snap.gamma:.4f}", "inline": True})
+            for name, value in alert.context_fields.items():
+                fields.append({"name": name, "value": value, "inline": True})
         fields.append({"name": "Reason", "value": "; ".join(alert.reasons[:4]), "inline": False})
         return {
             "username": "Unusual Options Scanner",
             "embeds": [{
                 "title": alert.title,
-                "description": f"{'Green Calls' if snap.contract.side == OptionSide.CALL else 'Red Puts'} | {alert.severity.value}",
+                "description": f"{'Green Calls' if snap.contract.side == OptionSide.CALL else 'Red Puts'} | {alert.severity.value}" + (f" | Lotto {alert.lotto_score}/100" if alert.alert_type == "lotto" else ""),
                 "color": color,
                 "fields": fields,
-                "footer": {"text": "Market data alert only. Not a trade recommendation."},
+                "footer": {"text": "High-risk short-dated options signal. Market data only; not a trade recommendation." if alert.alert_type == "lotto" else "Market data alert only. Not a trade recommendation."},
             }],
         }
 
