@@ -1,6 +1,6 @@
 # Railway Setup
 
-Deploy command is configured to run:
+Configure the existing scanner service's Railway start command as:
 
 ```bash
 python -m app.main
