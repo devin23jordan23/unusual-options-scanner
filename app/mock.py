@@ -2,7 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .config import Settings
-from .models import OptionContract, OptionSide, OptionSnapshot
+from .models import MarketSnapshot, OptionContract, OptionSide, OptionSnapshot
 
 
 class MockData:
@@ -32,4 +32,17 @@ class MockData:
             underlying = 193.86 if symbol == "NVDA" else 141.20 if symbol == "AMD" else 649.75
             out.append(OptionSnapshot(contract, volumes[idx], oi, mark, underlying, now))
         self.step += 1
+        return out
+
+    def market_snapshots(self, symbols: list[str]) -> dict[str, MarketSnapshot]:
+        now = datetime.now(ZoneInfo(self.settings.timezone))
+        moves = {
+            "NVDA": (193.86, 1.20), "AMD": (141.20, -0.85), "SPY": (649.75, 0.35),
+            "QQQ": (590.10, 0.62), "SMH": (330.50, 1.05), "XLK": (281.30, 0.55),
+        }
+        out = {}
+        for symbol in symbols:
+            price, pct = moves.get(symbol, (100.0, 0.20))
+            volume = 1_000_000 + self.step * 125_000
+            out[symbol] = MarketSnapshot(symbol, price, volume, pct, now)
         return out
