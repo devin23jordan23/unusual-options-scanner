@@ -52,6 +52,15 @@ class OptionSnapshot:
 
 
 @dataclass
+class MarketSnapshot:
+    symbol: str
+    price: float
+    total_volume: int
+    percent_change: Optional[float]
+    timestamp: datetime
+
+
+@dataclass
 class Alert:
     alert_type: str
     severity: Severity
@@ -61,6 +70,8 @@ class Alert:
     volume_delta_5m: int = 0
     estimated_premium: float = 0
     grouped_contracts: list[OptionSnapshot] = field(default_factory=list)
+    lotto_score: int = 0
+    context_fields: dict[str, str] = field(default_factory=dict)
 
     def premium_tier(self) -> str:
         if self.estimated_premium >= 2_000_000:
