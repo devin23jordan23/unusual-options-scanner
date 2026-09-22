@@ -2,6 +2,7 @@ import json
 import os
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
+from datetime import datetime
 
 from .models import Alert, OptionSnapshot, Severity
 
@@ -16,9 +17,39 @@ class LastAlert:
 
 
 class RollingState:
-    def __init__(self, max_age_seconds: int = 900):
+    def __init__(self, path: str | None = None, max_age_seconds: int = 900):
+        self.path = path
         self.max_age_seconds = max_age_seconds
         self.snapshots = defaultdict(deque)
+        self.persisted: dict[str, dict] = {}
+        self.load()
+
+    def load(self) -> None:
+        if not self.path or not os.path.exists(self.path):
+            return
+        try:
+            with open(self.path, "r") as f:
+                self.persisted = json.load(f).get("contracts", {})
+        except Exception:
+            self.persisted = {}
+
+    def save(self) -> None:
+        if not self.path:
+            return
+        contracts = {}
+        for option_symbol, snapshots in self.snapshots.items():
+            if not snapshots:
+                continue
+            latest = snapshots[-1]
+            if latest.volume <= 0:
+                continue
+            contracts[option_symbol] = {
+                "volume": latest.volume,
+                "timestamp": latest.timestamp.isoformat(),
+            }
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        with open(self.path, "w") as f:
+            json.dump({"contracts": contracts}, f)
 
     def record(self, snapshot: OptionSnapshot) -> None:
         q = self.snapshots[snapshot.contract.option_symbol]
@@ -28,7 +59,9 @@ class RollingState:
             q.popleft()
 
     def has_history(self, snapshot: OptionSnapshot) -> bool:
-        return bool(self.snapshots.get(snapshot.contract.option_symbol))
+        if self.snapshots.get(snapshot.contract.option_symbol):
+            return True
+        return self.persisted_baseline(snapshot) is not None
 
     def volume_delta(self, snapshot: OptionSnapshot, seconds: int = 300) -> int:
         q = self.snapshots.get(snapshot.contract.option_symbol)
@@ -41,8 +74,32 @@ class RollingState:
                 baseline = item
             else:
                 break
-        baseline = baseline or q[0]
-        return max(snapshot.volume - baseline.volume, 0)
+        if baseline is not None:
+            return max(snapshot.volume - baseline.volume, 0)
+        if len(q) > 1:
+            return max(snapshot.volume - q[0].volume, 0)
+        persisted = self.persisted_baseline(snapshot)
+        if persisted is not None:
+            return max(snapshot.volume - persisted[0], 0)
+        return 0
+
+    def persisted_baseline(self, snapshot: OptionSnapshot) -> tuple[int, datetime] | None:
+        raw = self.persisted.get(snapshot.contract.option_symbol)
+        if not raw:
+            return None
+        try:
+            timestamp = datetime.fromisoformat(raw["timestamp"])
+            age = snapshot.timestamp.timestamp() - timestamp.timestamp()
+            volume = int(raw["volume"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if timestamp.date() != snapshot.timestamp.date():
+            return None
+        if age < 0 or age > self.max_age_seconds:
+            return None
+        if snapshot.volume < volume:
+            return None
+        return volume, timestamp
 
 
 class AlertDeduper:

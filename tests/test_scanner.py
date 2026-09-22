@@ -120,6 +120,32 @@ class ScannerUnitTests(unittest.TestCase):
         state.record(first)
         self.assertTrue(state.has_history(first))
 
+    def test_rolling_state_survives_same_day_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "baseline.json")
+            early = snap(volume=1900, ts=datetime(2026, 9, 11, 10, 2, tzinfo=ZoneInfo("America/New_York")))
+            first = RollingState(path)
+            first.record(early)
+            first.save()
+
+            late = snap(volume=2400, ts=datetime(2026, 9, 11, 10, 4, tzinfo=ZoneInfo("America/New_York")))
+            restarted = RollingState(path)
+            self.assertTrue(restarted.has_history(late))
+            restarted.record(late)
+            self.assertEqual(restarted.volume_delta(late, 300), 500)
+
+    def test_rolling_state_ignores_previous_day(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "baseline.json")
+            prior = snap(volume=5000, ts=datetime(2026, 9, 10, 15, 59, tzinfo=ZoneInfo("America/New_York")))
+            first = RollingState(path)
+            first.record(prior)
+            first.save()
+
+            today = snap(volume=100, ts=datetime(2026, 9, 11, 9, 31, tzinfo=ZoneInfo("America/New_York")))
+            restarted = RollingState(path)
+            self.assertFalse(restarted.has_history(today))
+
     def test_alert_selection_caps_and_deduplicates_tickers(self):
         nvda = evaluate_contract(snap(symbol="NVDA", volume=7000, oi=500, mark=3), 4000, Thresholds())
         nvda_second = evaluate_contract(snap(symbol="NVDA", strike=200, volume=6000, oi=500, mark=2), 3000, Thresholds())

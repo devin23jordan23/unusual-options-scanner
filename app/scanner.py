@@ -27,7 +27,7 @@ class Scanner:
             self.data = SchwabClient(settings)
             start_auth_server(self.data)
         self.discord = DiscordNotifier(settings.discord_webhook)
-        self.rolling = RollingState()
+        self.rolling = RollingState(os.path.join(settings.data_dir, "option_volume_baseline.json"))
         self.deduper = AlertDeduper(os.path.join(settings.data_dir, "alert_state.json"))
         self.daily_report = DailyOptionsReport(
             os.path.join(settings.data_dir, "daily_options_report.json"),
@@ -70,6 +70,8 @@ class Scanner:
             cooldown = self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
             if self.deduper.should_send_contract(alert, cooldown):
                 candidates.append(alert)
+        if snapshots:
+            self.rolling.save()
         now_ts = time.time()
         eligible = [
             alert for alert in candidates
