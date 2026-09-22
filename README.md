@@ -73,15 +73,15 @@ python -m unittest discover -s tests
 
 ## Pre-Market Brief Service
 
-The 8:45 AM ET pre-market brief is a separate Railway cron service. It uses OpenAI web
-search to generate the report and posts the finished Markdown to Discord. It
-does not use Schwab.
+The 8:45 AM ET pre-market brief and the 9:55 AM ET opening-market watch are a
+separate Railway cron service. They use OpenAI web search to generate fresh
+reports and post the finished Markdown to Discord. They do not use Schwab.
 
 Configure the service directly in Railway with:
 
 ```text
 Start command: python -m app.premarket
-Cron schedule: 45 12,13 * * 1-5
+Cron schedule: 45,55 12-14 * * 1-5
 Restart policy: Never
 ```
 
@@ -93,7 +93,7 @@ DISCORD_PREMARKET_WEBHOOK=
 PREMARKET_TIMEZONE=America/New_York
 ```
 
-The service runs at both possible UTC equivalents of 8:45 AM Eastern and the
+The service runs at both possible UTC equivalents of 8:45 AM and 9:55 AM Eastern and the
 application's timezone guard allows only the correct run to publish. To test a
 deployment manually, override the start command temporarily or run:
 

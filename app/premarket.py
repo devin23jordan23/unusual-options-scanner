@@ -25,9 +25,12 @@ class PremarketSettings:
     timezone: str = "America/New_York"
     report_hour: int = 8
     report_minute: int = 45
+    open_report_hour: int = 9
+    open_report_minute: int = 55
     schedule_window_minutes: int = 10
     watchlist: str = DEFAULT_WATCHLIST
     prompt_path: str = "prompts/premarket_brief.md"
+    open_prompt_path: str = "prompts/opening_watch.md"
     max_output_tokens: int = 14000
     reasoning_effort: str = "high"
     log_level: str = "INFO"
@@ -44,31 +47,48 @@ def load_settings() -> PremarketSettings:
         timezone=os.getenv("PREMARKET_TIMEZONE", "America/New_York"),
         report_hour=int(os.getenv("PREMARKET_REPORT_HOUR", "8")),
         report_minute=int(os.getenv("PREMARKET_REPORT_MINUTE", "45")),
+        open_report_hour=int(os.getenv("PREMARKET_OPEN_REPORT_HOUR", "9")),
+        open_report_minute=int(os.getenv("PREMARKET_OPEN_REPORT_MINUTE", "55")),
         schedule_window_minutes=int(os.getenv("PREMARKET_SCHEDULE_WINDOW_MINUTES", "10")),
         watchlist=os.getenv("PREMARKET_WATCHLIST", DEFAULT_WATCHLIST),
         prompt_path=os.getenv("PREMARKET_PROMPT_PATH", "prompts/premarket_brief.md"),
+        open_prompt_path=os.getenv("PREMARKET_OPEN_PROMPT_PATH", "prompts/opening_watch.md"),
         max_output_tokens=int(os.getenv("PREMARKET_MAX_OUTPUT_TOKENS", "14000")),
         reasoning_effort=os.getenv("PREMARKET_REASONING_EFFORT", "high"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
     )
 
 
-def scheduled_now(settings: PremarketSettings, now: datetime | None = None) -> bool:
+def scheduled_report(settings: PremarketSettings, now: datetime | None = None) -> str | None:
     now = now or datetime.now(ZoneInfo(settings.timezone))
     if now.tzinfo is None:
         now = now.replace(tzinfo=ZoneInfo(settings.timezone))
     else:
         now = now.astimezone(ZoneInfo(settings.timezone))
     if now.weekday() >= 5:
-        return False
-    target_minutes = settings.report_hour * 60 + settings.report_minute
+        return None
     current_minutes = now.hour * 60 + now.minute
-    return 0 <= current_minutes - target_minutes < settings.schedule_window_minutes
+    schedules = {
+        "premarket": settings.report_hour * 60 + settings.report_minute,
+        "opening": settings.open_report_hour * 60 + settings.open_report_minute,
+    }
+    for report_kind, target_minutes in schedules.items():
+        if 0 <= current_minutes - target_minutes < settings.schedule_window_minutes:
+            return report_kind
+    return None
 
 
-def load_prompt(settings: PremarketSettings, now: datetime | None = None) -> str:
+def scheduled_now(settings: PremarketSettings, now: datetime | None = None) -> bool:
+    return scheduled_report(settings, now) is not None
+
+
+def load_prompt(
+    settings: PremarketSettings,
+    now: datetime | None = None,
+    report_kind: str = "premarket",
+) -> str:
     now = now or datetime.now(ZoneInfo(settings.timezone))
-    prompt_path = Path(settings.prompt_path)
+    prompt_path = Path(settings.open_prompt_path if report_kind == "opening" else settings.prompt_path)
     if not prompt_path.is_absolute():
         prompt_path = Path(__file__).resolve().parents[1] / prompt_path
     template = prompt_path.read_text(encoding="utf-8")
@@ -173,6 +193,7 @@ def publish_report(settings: PremarketSettings, report: str) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate and publish Andre's pre-market brief")
     parser.add_argument("--force", action="store_true", help="ignore the weekday and schedule guard")
+    parser.add_argument("--report", choices=("premarket", "opening"), default=None)
     parser.add_argument("--dry-run", action="store_true", help="generate and print without posting to Discord")
     args = parser.parse_args()
 
@@ -182,12 +203,14 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     now = datetime.now(ZoneInfo(settings.timezone))
-    if not args.force and not scheduled_now(settings, now):
+    report_kind = args.report or scheduled_report(settings, now)
+    if not args.force and report_kind is None:
         LOG.info("Outside the configured premarket window; nothing to send (%s)", now.isoformat())
         return
+    report_kind = report_kind or "premarket"
 
-    LOG.info("Generating premarket brief with %s", settings.model)
-    report = generate_report(settings, load_prompt(settings, now))
+    LOG.info("Generating %s report with %s", report_kind, settings.model)
+    report = generate_report(settings, load_prompt(settings, now, report_kind))
     if args.dry_run:
         print(report)
         return

@@ -35,9 +35,9 @@ deploys or restarts.
 ## Separate Pre-Market Brief Cron Service
 
 Create a second service from this same GitHub repository. Set its start command
-to `python -m app.premarket`, its cron schedule to `45 12,13 * * 1-5`, and its
+to `python -m app.premarket`, its cron schedule to `45,55 12-14 * * 1-5`, and its
 restart policy to `Never`. The application checks Eastern time and exits
-without sending on the extra daylight-saving-time run.
+without sending on the extra daylight-saving-time or in-between run.
 
 Required variables for only this service:
 
