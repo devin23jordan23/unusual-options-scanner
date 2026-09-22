@@ -1,5 +1,6 @@
 import hmac
 import html
+import json
 import logging
 import os
 import threading
@@ -15,10 +16,15 @@ def start_auth_server(schwab_client) -> None:
     if not port:
         return
     setup_key = os.getenv("SCHWAB_AUTH_SETUP_KEY", "")
+    broker_key = os.getenv("SCHWAB_TOKEN_BROKER_KEY", "")
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if urlparse(self.path).path != "/schwab-auth":
+            path = urlparse(self.path).path
+            if path == "/schwab-token":
+                self.serve_broker_token()
+                return
+            if path != "/schwab-auth":
                 self.send_error(404)
                 return
             token_status = (
@@ -64,6 +70,29 @@ def start_auth_server(schwab_client) -> None:
         def log_message(self, format, *args):
             LOG.info("Schwab auth page: " + format, *args)
 
+        def serve_broker_token(self) -> None:
+            supplied = self.headers.get("Authorization", "")
+            expected = f"Bearer {broker_key}"
+            if not broker_key or not hmac.compare_digest(supplied, expected):
+                self.json_response(401, {"error": "unauthorized"})
+                return
+            try:
+                access_token = schwab_client.access_token()
+            except Exception as exc:
+                LOG.error("Schwab token broker unavailable: %s", type(exc).__name__)
+                self.json_response(503, {"error": "token_unavailable"})
+                return
+            self.json_response(200, {"access_token": access_token, "expires_in": 240})
+
+        def json_response(self, status: int, payload: dict) -> None:
+            content = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
         def page(self, status: int, body: str) -> None:
             content = f"<!doctype html><html><head><meta charset=\"utf-8\"><title>Schwab authorization</title></head><body>{body}</body></html>".encode()
             self.send_response(status)
@@ -75,3 +104,5 @@ def start_auth_server(schwab_client) -> None:
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     threading.Thread(target=server.serve_forever, name="schwab-auth-server", daemon=True).start()
     LOG.info("Schwab authorization page available at /schwab-auth")
+    if broker_key:
+        LOG.info("Schwab token broker enabled at /schwab-token")

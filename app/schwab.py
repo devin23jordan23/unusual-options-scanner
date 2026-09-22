@@ -1,8 +1,11 @@
 import base64
+import fcntl
 import json
 import logging
 import os
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -30,6 +33,7 @@ class SchwabClient:
         self.seed_refresh_token = os.getenv("SCHWAB_REFRESH_TOKEN", "")
         self.seed_access_token = os.getenv("SCHWAB_ACCESS_TOKEN", "")
         self.auth_callback_url = os.getenv("SCHWAB_AUTH_CALLBACK_URL", "")
+        self._thread_token_lock = threading.RLock()
         os.makedirs(settings.data_dir, exist_ok=True)
         self.token_file = os.path.join(settings.data_dir, "schwab_tokens.json")
         if self.auth_callback_url and not os.path.exists(self.token_file):
@@ -75,9 +79,15 @@ class SchwabClient:
 
     def get(self, endpoint: str, params: dict | None = None) -> dict:
         for attempt in range(2):
-            resp = requests.get(f"{BASE_URL}{endpoint}", headers=self.headers(), params=params or {}, timeout=15)
+            access_token = self.access_token()
+            resp = requests.get(
+                f"{BASE_URL}{endpoint}",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+                params=params or {},
+                timeout=15,
+            )
             if resp.status_code == 401 and attempt == 0:
-                self.refresh_tokens(self.load_tokens())
+                self.refresh_after_unauthorized(access_token)
                 continue
             resp.raise_for_status()
             return resp.json()
@@ -91,7 +101,10 @@ class SchwabClient:
         if not tokens:
             raise RuntimeError(f"Schwab auth required. Authorize at: {self.authorization_url()}")
         if expired(tokens):
-            tokens = self.refresh_tokens(tokens)
+            with self.token_lock():
+                tokens = self.load_tokens()
+                if expired(tokens):
+                    tokens = self.refresh_tokens(tokens)
         token = tokens.get("access_token")
         if not token:
             raise RuntimeError(f"Schwab auth required. Authorize at: {self.authorization_url()}")
@@ -111,22 +124,37 @@ class SchwabClient:
             with open(self.token_file, "r") as f:
                 return json.load(f)
         if self.seed_refresh_token:
-            tokens = {
+            return {
                 "refresh_token": self.seed_refresh_token,
                 "access_token": self.seed_access_token,
                 "expires_in": int(os.getenv("SCHWAB_EXPIRES_IN", "0") or 0),
                 "saved_at": float(os.getenv("SCHWAB_TOKEN_SAVED_AT", "0") or 0),
             }
-            if not tokens["access_token"] or expired(tokens):
-                return self.refresh_tokens(tokens)
-            return tokens
         return {}
 
     def save_tokens(self, tokens: dict) -> None:
         tokens["saved_at"] = time.time()
         os.makedirs(os.path.dirname(self.token_file), exist_ok=True)
-        with open(self.token_file, "w") as f:
+        temporary = f"{self.token_file}.{os.getpid()}.tmp"
+        with open(temporary, "w") as f:
             json.dump(tokens, f, indent=2)
+        os.replace(temporary, self.token_file)
+
+    def refresh_after_unauthorized(self, failed_access_token: str) -> None:
+        with self.token_lock():
+            tokens = self.load_tokens()
+            if tokens.get("access_token") == failed_access_token:
+                self.refresh_tokens(tokens)
+
+    @contextmanager
+    def token_lock(self):
+        with self._thread_token_lock:
+            with open(f"{self.token_file}.lock", "a") as handle:
+                fcntl.flock(handle, fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(handle, fcntl.LOCK_UN)
 
     def refresh_tokens(self, tokens: dict) -> dict:
         if not self.client_id or not self.client_secret:
