@@ -82,6 +82,20 @@ def scheduled_now(settings: PremarketSettings, now: datetime | None = None) -> b
     return scheduled_report(settings, now) is not None
 
 
+def report_to_run(
+    settings: PremarketSettings,
+    now: datetime,
+    requested: str | None = None,
+    force: bool = False,
+) -> str | None:
+    due = scheduled_report(settings, now)
+    if force:
+        return requested or due or "premarket"
+    if requested is not None and requested != due:
+        return None
+    return due
+
+
 def load_prompt(
     settings: PremarketSettings,
     now: datetime | None = None,
@@ -203,11 +217,10 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     now = datetime.now(ZoneInfo(settings.timezone))
-    report_kind = args.report or scheduled_report(settings, now)
-    if not args.force and report_kind is None:
+    report_kind = report_to_run(settings, now, args.report, args.force)
+    if report_kind is None:
         LOG.info("Outside the configured premarket window; nothing to send (%s)", now.isoformat())
         return
-    report_kind = report_kind or "premarket"
 
     LOG.info("Generating %s report with %s", report_kind, settings.model)
     report = generate_report(settings, load_prompt(settings, now, report_kind))

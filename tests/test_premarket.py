@@ -2,7 +2,14 @@ import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from app.premarket import PremarketSettings, extract_output_text, scheduled_now, scheduled_report, split_report
+from app.premarket import (
+    PremarketSettings,
+    extract_output_text,
+    report_to_run,
+    scheduled_now,
+    scheduled_report,
+    split_report,
+)
 
 
 class PremarketUnitTests(unittest.TestCase):
@@ -16,6 +23,8 @@ class PremarketUnitTests(unittest.TestCase):
 
         opening = datetime(2026, 9, 21, 9, 59, tzinfo=ZoneInfo("America/New_York"))
         self.assertEqual(scheduled_report(self.settings(), opening), "opening")
+        self.assertIsNone(report_to_run(self.settings(), opening, "premarket"))
+        self.assertEqual(report_to_run(self.settings(), opening, "opening"), "opening")
 
     def test_schedule_guard_rejects_wrong_time_and_weekend(self):
         early = datetime(2026, 9, 21, 7, 45, tzinfo=ZoneInfo("America/New_York"))
