@@ -21,12 +21,15 @@ def start_auth_server(schwab_client) -> None:
             if urlparse(self.path).path != "/schwab-auth":
                 self.send_error(404)
                 return
-            if os.path.exists(schwab_client.token_file):
-                self.page(200, "Schwab is already authorized. You can remove SCHWAB_AUTH_SETUP_KEY from Railway.")
-                return
+            token_status = (
+                "A stored Schwab token exists. Submitting this form replaces it."
+                if os.path.exists(schwab_client.token_file)
+                else "No stored Schwab token was found."
+            )
             auth_url = html.escape(schwab_client.authorization_url(), quote=True)
             self.page(200, f"""
                 <h1>Schwab authorization</h1>
+                <p>{token_status}</p>
                 <p><a href=\"{auth_url}\" target=\"_blank\">1. Sign in to Schwab</a></p>
                 <p>2. Copy the complete <code>https://127.0.0.1/?code=...</code> URL from the browser.</p>
                 <form method=\"post\" action=\"/schwab-auth\">

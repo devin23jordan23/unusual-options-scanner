@@ -11,7 +11,6 @@ Required Railway variables:
 ```text
 SCHWAB_CLIENT_ID=
 SCHWAB_CLIENT_SECRET=
-SCHWAB_REFRESH_TOKEN=
 DISCORD_UNUSUAL_OPTIONS_WEBHOOK=
 SCANNER_MODE=live
 SCANNER_TIMEZONE=America/New_York
@@ -28,9 +27,10 @@ data/schwab_tokens.json
 data/alert_state.json
 ```
 
-Those JSON files are ignored by git. On Railway, set `SCHWAB_REFRESH_TOKEN`
-so the scanner can refresh its access token and pull Schwab market data after
-deploys or restarts.
+Those JSON files are ignored by git. The browser authorization flow stores the
+current access and refresh tokens in the persistent volume, so
+`SCHWAB_REFRESH_TOKEN`, `SCHWAB_ACCESS_TOKEN`, and `SCHWAB_TOKEN_SAVED_AT` are
+not needed after browser authorization.
 
 ## Separate Pre-Market Brief Cron Service
 
@@ -66,6 +66,7 @@ Use the page's Schwab login link. After Schwab redirects to
 `https://127.0.0.1/?code=...`, immediately paste that complete address and the
 setup key into the already-running authorization page. No deployment occurs
 while the short-lived code is active. The scanner stores tokens in
-`/app/data/schwab_tokens.json`. Delete `SCHWAB_AUTH_SETUP_KEY` and any old
+`/app/data/schwab_tokens.json`. The same page can replace an expired stored
+token during later reauthorization. Delete `SCHWAB_AUTH_SETUP_KEY` and any old
 `SCHWAB_AUTH_CALLBACK_URL` after success. Never paste the callback URL into
 Discord, source control, or chat.
