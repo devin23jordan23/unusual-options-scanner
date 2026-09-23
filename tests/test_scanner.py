@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, datetime
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from app.aggregation import ticker_level_alerts
@@ -178,6 +179,25 @@ class ScannerUnitTests(unittest.TestCase):
         payload = DiscordNotifier("").payload(alert)
         activity = next(field for field in payload["embeds"][0]["fields"] if field["name"] == "Estimated Activity")
         self.assertEqual(activity["value"], "$36,000")
+
+    def test_compact_group_preserves_alert_details(self):
+        extreme = evaluate_contract(snap(symbol="NVDA", volume=10000, oi=500, mark=3), 8000, Thresholds())
+        put = evaluate_contract(snap(symbol="AMD", side=OptionSide.PUT, volume=6482, oi=903, mark=2.5), 2141, Thresholds())
+        normal = evaluate_contract(snap(symbol="MU", volume=500, oi=100, mark=1), 360, Thresholds(min_score=3))
+        alerts = [extreme, put, normal]
+        notifier = DiscordNotifier("https://example.invalid/webhook")
+        payload = notifier.group_payload(alerts)
+        embed = payload["embeds"][0]
+        self.assertEqual(len(payload["embeds"]), 1)
+        self.assertIn("NVDA, AMD, MU", embed["title"])
+        self.assertIn("🔥", embed["description"])
+        self.assertIn("🔴 AMD PUT", embed["description"])
+        self.assertIn("Est. $2,400,000", embed["description"])
+        self.assertIn("Vol 10,000 / OI 500 · 20.00x · Stock $193.86", embed["description"])
+        self.assertEqual(embed["color"], 0x3498DB)
+        with patch.object(notifier, "send_payload", return_value=True) as send:
+            self.assertTrue(notifier.send_group(alerts))
+            send.assert_called_once_with(payload, "options alerts: NVDA, AMD, MU")
 
     def test_symbol_specific_thresholds(self):
         settings = Settings(symbol_overrides={"SPY": Thresholds(min_volume=5000)})

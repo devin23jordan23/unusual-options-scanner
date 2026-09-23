@@ -82,11 +82,13 @@ class Scanner:
             )
         ]
         selected = strongest_distinct_tickers(eligible, self.settings.max_alerts_per_cycle)
-        for alert in selected:
-            if self.discord.send(alert):
-                self.deduper.mark_ticker(ticker_dedupe_key(alert), now_ts)
-                if alert.alert_type == "contract":
-                    self.deduper.mark_contract(alert)
+        for offset in range(0, len(selected), 3):
+            group = selected[offset:offset + 3]
+            if self.discord.send_group(group):
+                for alert in group:
+                    self.deduper.mark_ticker(ticker_dedupe_key(alert), now_ts)
+                    if alert.alert_type == "contract":
+                        self.deduper.mark_contract(alert)
         LOG.info(
             "scan complete option_snapshots=%s qualified=%s selected=%s",
             len(snapshots),
