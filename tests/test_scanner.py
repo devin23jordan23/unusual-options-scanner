@@ -198,6 +198,11 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertTrue(all(alert.long_dated_whale for alert in selected))
         self.assertEqual(strongest_distinct_tickers(regular, 0), [])
 
+    def test_distinct_long_dated_contracts_on_same_ticker_are_both_sent(self):
+        first = evaluate_contract(snap(symbol="NVDA", strike=195, volume=50, mark=200, dte=45), 50, Thresholds())
+        second = evaluate_contract(snap(symbol="NVDA", strike=200, volume=60, mark=200, dte=45), 60, Thresholds())
+        self.assertEqual(select_alerts([first, second], 1), [second, first])
+
     def test_scanner_sends_whales_despite_ticker_cooldown_and_regular_cap(self):
         scanner = Scanner.__new__(Scanner)
         scanner.settings = Settings(core_universe={"NVDA"}, max_alerts_per_cycle=1)

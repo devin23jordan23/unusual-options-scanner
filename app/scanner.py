@@ -120,13 +120,8 @@ def select_alerts(alerts, regular_limit: int):
         key=lambda alert: (alert.estimated_premium, alert_rank(alert)),
         reverse=True,
     )
-    selected = []
-    whale_symbols = set()
-    for alert in whales:
-        symbol = alert.snapshot.contract.symbol
-        if symbol not in whale_symbols:
-            selected.append(alert)
-            whale_symbols.add(symbol)
+    selected = list(whales)
+    whale_symbols = {alert.snapshot.contract.symbol for alert in whales}
     regular = [alert for alert in alerts if not alert.long_dated_whale and alert.snapshot.contract.symbol not in whale_symbols]
     selected.extend(strongest_distinct_tickers(regular, max(regular_limit - len(selected), 0)))
     return selected
