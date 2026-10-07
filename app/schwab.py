@@ -245,7 +245,11 @@ class SchwabClient:
             premium = max(snap.mark or 0, 0) * snap.volume * 100
             exceptional = snap.volume >= thresholds.min_volume * 4
             whale_flow = premium >= thresholds.long_dte_min_premium
-            if lower <= snap.contract.strike <= upper or exceptional or whale_flow:
+            long_dated_whale = (
+                thresholds.long_dte_whale_min_days <= snap.contract.dte <= thresholds.long_dte_whale_max_days
+                and premium >= thresholds.long_dte_whale_min_premium
+            )
+            if lower <= snap.contract.strike <= upper or exceptional or whale_flow or long_dated_whale:
                 kept.append(snap)
         return kept
 

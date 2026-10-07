@@ -131,11 +131,15 @@ class AlertDeduper:
         if not last:
             return True
         now = alert.snapshot.timestamp.timestamp()
+        if datetime.fromtimestamp(last.sent_at, alert.snapshot.timestamp.tzinfo).date() != alert.snapshot.timestamp.date():
+            return True
         if severity_rank(alert.severity.value) > severity_rank(last.severity):
             return True
         if alert.snapshot.volume >= max(last.volume * 1.5, last.volume + 1000):
             return True
         if alert.premium_tier() != last.premium_tier and alert.estimated_premium > premium_floor(last.premium_tier):
+            return True
+        if alert.long_dated_whale and now - last.sent_at >= cooldown_seconds:
             return True
         return now - last.sent_at >= cooldown_seconds and alert.volume_delta_5m >= 1000
 

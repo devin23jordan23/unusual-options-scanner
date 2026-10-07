@@ -7,6 +7,10 @@ def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds
     min_volume = thresholds.min_volume_0dte if snapshot.contract.dte == 0 else thresholds.min_volume
     min_delta = thresholds.min_5m_volume_increase_0dte if snapshot.contract.dte == 0 else thresholds.min_5m_volume_increase
     premium = estimated_premium(snapshot, volume_delta_5m)
+    long_dated_whale = (
+        thresholds.long_dte_whale_min_days <= snapshot.contract.dte <= thresholds.long_dte_whale_max_days
+        and premium >= thresholds.long_dte_whale_min_premium
+    )
     ratio = snapshot.vol_oi
     long_dte = snapshot.contract.dte > 7
     score = 0
@@ -14,7 +18,9 @@ def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds
 
     # Require meaningful new activity; cumulative daily volume and low-OI ratios
     # alone should not resurrect an old contract.
-    if volume_delta_5m < max(min_delta // 4, 1):
+    if volume_delta_5m <= 0:
+        return None
+    if volume_delta_5m < max(min_delta // 4, 1) and not long_dated_whale:
         return None
     if premium < thresholds.min_estimated_premium:
         return None
@@ -55,14 +61,17 @@ def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds
         score += 1
         reasons.append("high volume on zero reported open interest")
 
-    if long_dte and not has_long_dte_signal(snapshot, premium, ratio, thresholds):
+    if long_dte and not (has_long_dte_signal(snapshot, premium, ratio, thresholds) or long_dated_whale):
         return None
-    if score < thresholds.min_score:
+    if score < thresholds.min_score and not long_dated_whale:
         return None
 
     side_word = "CALL" if snapshot.contract.side == OptionSide.CALL else "PUT"
     title = f"Unusual {side_word} activity - {snapshot.contract.symbol}"
-    return Alert("contract", severity_for(score, premium, ratio, thresholds), title, snapshot, reasons, volume_delta_5m, premium)
+    severity = severity_for(score, premium, ratio, thresholds)
+    if long_dated_whale and severity in (Severity.WATCH, Severity.UNUSUAL):
+        severity = Severity.HIGH
+    return Alert("contract", severity, title, snapshot, reasons, volume_delta_5m, premium, long_dated_whale=long_dated_whale)
 
 
 def has_long_dte_signal(snapshot: OptionSnapshot, premium: float, ratio: float | None, thresholds: Thresholds) -> bool:

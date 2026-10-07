@@ -61,6 +61,7 @@ class Alert:
     volume_delta_5m: int = 0
     estimated_premium: float = 0
     grouped_contracts: list[OptionSnapshot] = field(default_factory=list)
+    long_dated_whale: bool = False
 
     def premium_tier(self) -> str:
         if self.estimated_premium >= 2_000_000:

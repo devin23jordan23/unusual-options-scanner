@@ -109,8 +109,9 @@ class DiscordNotifier:
                 ratio = snap.vol_oi
                 detail = f"{format_strike(contract.strike)}{'C' if side == 'CALL' else 'P'} · {contract.dte} DTE · Est. ${alert.estimated_premium:,.0f}"
             ratio_text = "n/a" if ratio is None else f"{ratio:.2f}x"
+            whale_label = " · LONG-DATED" if alert.long_dated_whale else ""
             sections.append(
-                f"**{marker}{side_marker} {contract.symbol} {side} · {alert.severity.value}**\n"
+                f"**{marker}{side_marker} {contract.symbol} {side} · {alert.severity.value}{whale_label}**\n"
                 f"{detail}\n"
                 f"Vol {volume:,} / OI {oi:,} · {ratio_text} · Stock {spot}"
             )

@@ -75,13 +75,13 @@ class Scanner:
         now_ts = time.time()
         eligible = [
             alert for alert in candidates
-            if self.deduper.should_send_ticker(
+            if alert.long_dated_whale or self.deduper.should_send_ticker(
                 ticker_dedupe_key(alert),
                 now_ts,
                 ticker_cooldown(alert, self.settings),
             )
         ]
-        selected = strongest_distinct_tickers(eligible, self.settings.max_alerts_per_cycle)
+        selected = select_alerts(eligible, self.settings.max_alerts_per_cycle)
         for offset in range(0, len(selected), 3):
             group = selected[offset:offset + 3]
             if self.discord.send_group(group):
@@ -98,6 +98,8 @@ class Scanner:
 
 
 def strongest_distinct_tickers(alerts, limit: int):
+    if limit <= 0:
+        return []
     ranked = sorted(alerts, key=alert_rank, reverse=True)
     selected = []
     seen = set()
@@ -109,6 +111,24 @@ def strongest_distinct_tickers(alerts, limit: int):
         selected.append(alert)
         if len(selected) >= max(limit, 0):
             break
+    return selected
+
+
+def select_alerts(alerts, regular_limit: int):
+    whales = sorted(
+        (alert for alert in alerts if alert.long_dated_whale),
+        key=lambda alert: (alert.estimated_premium, alert_rank(alert)),
+        reverse=True,
+    )
+    selected = []
+    whale_symbols = set()
+    for alert in whales:
+        symbol = alert.snapshot.contract.symbol
+        if symbol not in whale_symbols:
+            selected.append(alert)
+            whale_symbols.add(symbol)
+    regular = [alert for alert in alerts if not alert.long_dated_whale and alert.snapshot.contract.symbol not in whale_symbols]
+    selected.extend(strongest_distinct_tickers(regular, max(regular_limit - len(selected), 0)))
     return selected
 
 

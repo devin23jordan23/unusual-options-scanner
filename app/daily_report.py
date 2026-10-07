@@ -57,6 +57,7 @@ class DailyOptionsReport:
             "vol_oi": snap.vol_oi,
             "estimated_activity": alert.estimated_premium,
             "severity": alert.severity.value,
+            "long_dated_whale": alert.long_dated_whale,
         }
         previous = self.contracts.get(key)
         if previous and report_rank(previous) >= report_rank(entry):
@@ -83,17 +84,25 @@ class DailyOptionsReport:
         puts = self.top(OptionSide.PUT.value)
         call_total = sum(item["estimated_activity"] for item in self.contracts.values() if item["side"] == OptionSide.CALL.value)
         put_total = sum(item["estimated_activity"] for item in self.contracts.values() if item["side"] == OptionSide.PUT.value)
+        whales = sorted(
+            (item for item in self.contracts.values() if item.get("long_dated_whale")),
+            key=lambda item: item["estimated_activity"],
+            reverse=True,
+        )[:self.top_count]
+        fields = [
+            {"name": "Major Call Volume", "value": report_lines(calls), "inline": False},
+            {"name": "Major Put Volume", "value": report_lines(puts), "inline": False},
+        ]
+        if whales:
+            fields.append({"name": "Long-Dated $1M+ Activity", "value": report_lines(whales), "inline": False})
+        fields.append({"name": "Session Summary", "value": f"Calls: {len([x for x in self.contracts.values() if x['side'] == OptionSide.CALL.value])} contracts / {money(call_total)} fresh est.\nPuts: {len([x for x in self.contracts.values() if x['side'] == OptionSide.PUT.value])} contracts / {money(put_total)} fresh est.", "inline": False})
         return {
             "username": "Unusual Options Scanner",
             "embeds": [{
                 "title": f"Daily Options Flow Report - {now.strftime('%b %d, %Y')}",
                 "description": "Strongest UNUSUAL, HIGH, and EXTREME options signals observed today.",
                 "color": 0x3498DB,
-                "fields": [
-                    {"name": "Major Call Volume", "value": report_lines(calls), "inline": False},
-                    {"name": "Major Put Volume", "value": report_lines(puts), "inline": False},
-                    {"name": "Session Summary", "value": f"Calls: {len([x for x in self.contracts.values() if x['side'] == OptionSide.CALL.value])} contracts / {money(call_total)} fresh est.\nPuts: {len([x for x in self.contracts.values() if x['side'] == OptionSide.PUT.value])} contracts / {money(put_total)} fresh est.", "inline": False},
-                ],
+                "fields": fields,
                 "footer": {"text": "Scanner-qualified flow only. Estimated activity is not confirmed order-side data."},
             }],
         }

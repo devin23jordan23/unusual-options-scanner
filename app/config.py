@@ -44,6 +44,9 @@ class Thresholds:
     long_dte_min_volume: int = 250
     long_dte_min_vol_oi: float = 2.0
     long_dte_min_premium: float = 1_000_000
+    long_dte_whale_min_days: int = 21
+    long_dte_whale_max_days: int = 60
+    long_dte_whale_min_premium: float = 1_000_000
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,9 @@ def load_settings() -> Settings:
         long_dte_min_volume=int(os.getenv("UOA_LONG_DTE_MIN_VOLUME", "250")),
         long_dte_min_vol_oi=float(os.getenv("UOA_LONG_DTE_MIN_VOL_OI", "2.0")),
         long_dte_min_premium=float(os.getenv("UOA_LONG_DTE_MIN_PREMIUM", "1000000")),
+        long_dte_whale_min_days=int(os.getenv("UOA_LONG_DTE_WHALE_MIN_DAYS", "21")),
+        long_dte_whale_max_days=int(os.getenv("UOA_LONG_DTE_WHALE_MAX_DAYS", "60")),
+        long_dte_whale_min_premium=float(os.getenv("UOA_LONG_DTE_WHALE_MIN_PREMIUM", "1000000")),
     )
     etf_t = replace(
         t,

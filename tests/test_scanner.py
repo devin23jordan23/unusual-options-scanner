@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 from datetime import date, datetime
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from app.aggregation import ticker_level_alerts
@@ -12,7 +12,8 @@ from app.daily_report import DailyOptionsReport
 from app.metrics import estimated_premium, volume_oi_ratio
 from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
 from app.rules import evaluate_contract
-from app.scanner import strongest_distinct_tickers
+from app.scanner import Scanner, select_alerts, strongest_distinct_tickers
+from app.schwab import SchwabClient
 from app.state import AlertDeduper, RollingState
 from app.oauth import callback_code
 
@@ -89,6 +90,31 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertIsNotNone(alert)
         self.assertIn("longer-dated high-premium flow", alert.reasons)
 
+    def test_fresh_long_dated_whale_bypasses_contract_count_and_score(self):
+        thresholds = Thresholds(
+            min_5m_volume_increase=5000,
+            min_score=5,
+            long_dte_min_premium=3_000_000,
+            premium_whale=3_000_000,
+            premium_extreme_whale=5_000_000,
+        )
+        contract = snap(symbol="SPY", volume=50, oi=1000, mark=200, dte=45)
+        alert = evaluate_contract(contract, 50, thresholds)
+        self.assertIsNotNone(alert)
+        self.assertTrue(alert.long_dated_whale)
+        self.assertEqual(alert.estimated_premium, 1_000_000)
+        self.assertEqual(alert.severity, Severity.HIGH)
+        self.assertIsNone(evaluate_contract(contract, 0, thresholds))
+        self.assertIsNone(evaluate_contract(snap(volume=50, mark=200, dte=20), 50, thresholds))
+        self.assertIsNone(evaluate_contract(snap(volume=50, mark=200, dte=61), 50, thresholds))
+        self.assertIsNone(evaluate_contract(snap(volume=50, mark=199.99, dte=45), 50, thresholds))
+
+    def test_long_dated_whale_can_pass_far_strike_filter(self):
+        client = SchwabClient.__new__(SchwabClient)
+        client.settings = Settings(symbol_overrides={"SPY": Thresholds(long_dte_min_premium=3_000_000)})
+        contract = snap(symbol="SPY", strike=350, volume=50, mark=200, dte=45)
+        self.assertEqual(client._filter_near_spot([contract], 193.86), [contract])
+
     def test_long_dte_noise_is_suppressed(self):
         alert = evaluate_contract(snap(volume=700, oi=500, mark=1.0, dte=45), 0, Thresholds())
         self.assertIsNone(alert)
@@ -161,6 +187,57 @@ class ScannerUnitTests(unittest.TestCase):
         selected = strongest_distinct_tickers([nvda_second, tsla, nvda], 2)
         self.assertEqual(len(selected), 2)
         self.assertEqual({a.snapshot.contract.symbol for a in selected}, {"NVDA", "TSLA"})
+
+    def test_long_dated_whales_take_priority_beyond_regular_limit(self):
+        regular = [evaluate_contract(snap(symbol=symbol, volume=8000, oi=500, mark=3), 5000, Thresholds())
+                   for symbol in ("AMD", "TSLA", "META")]
+        whales = [evaluate_contract(snap(symbol=symbol, volume=50, oi=1000, mark=200, dte=45), 50, Thresholds())
+                  for symbol in ("NVDA", "SPY", "QQQ", "MSFT")]
+        selected = select_alerts(regular + whales, 3)
+        self.assertEqual({alert.snapshot.contract.symbol for alert in selected}, {"NVDA", "SPY", "QQQ", "MSFT"})
+        self.assertTrue(all(alert.long_dated_whale for alert in selected))
+        self.assertEqual(strongest_distinct_tickers(regular, 0), [])
+
+    def test_scanner_sends_whales_despite_ticker_cooldown_and_regular_cap(self):
+        scanner = Scanner.__new__(Scanner)
+        scanner.settings = Settings(core_universe={"NVDA"}, max_alerts_per_cycle=1)
+        contracts = [snap(symbol=symbol, volume=50, oi=1000, mark=200, dte=45)
+                     for symbol in ("NVDA", "SPY", "QQQ", "MSFT")]
+        scanner.data = Mock(option_snapshots=Mock(return_value=contracts))
+        scanner.rolling = Mock(has_history=Mock(return_value=True), volume_delta=Mock(return_value=50))
+        scanner.daily_report = Mock()
+        scanner.deduper = Mock(should_send_contract=Mock(return_value=True), should_send_ticker=Mock(return_value=False))
+        scanner.discord = Mock(send_group=Mock(return_value=True))
+        scanner.run_once()
+        self.assertEqual(scanner.discord.send_group.call_count, 2)
+        self.assertEqual([len(call.args[0]) for call in scanner.discord.send_group.call_args_list], [3, 1])
+        scanner.deduper.should_send_ticker.assert_not_called()
+        self.assertEqual(scanner.deduper.mark_contract.call_count, 4)
+
+    def test_long_dated_whale_repeats_after_cooldown_or_new_day(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deduper = AlertDeduper(os.path.join(tmp, "alerts.json"))
+            first = evaluate_contract(snap(volume=50, oi=1000, mark=200, dte=45), 50, Thresholds())
+            deduper.mark_contract(first)
+            before_cooldown = evaluate_contract(snap(volume=60, oi=1000, mark=200, dte=45,
+                                                      ts=datetime(2026, 9, 11, 10, 10, tzinfo=ZoneInfo("America/New_York"))), 50, Thresholds())
+            same_day = evaluate_contract(snap(volume=100, oi=1000, mark=200, dte=45,
+                                               ts=datetime(2026, 9, 11, 10, 13, tzinfo=ZoneInfo("America/New_York"))), 50, Thresholds())
+            next_day = evaluate_contract(snap(volume=50, oi=1000, mark=200, dte=45,
+                                              ts=datetime(2026, 9, 12, 10, 7, tzinfo=ZoneInfo("America/New_York"))), 50, Thresholds())
+            self.assertFalse(deduper.should_send_contract(before_cooldown, 300))
+            self.assertTrue(deduper.should_send_contract(same_day, 300))
+            self.assertTrue(deduper.should_send_contract(next_day, 300))
+
+    def test_daily_report_highlights_long_dated_whales(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)
+            whale = evaluate_contract(snap(symbol="NVDA", volume=50, oi=1000, mark=200, dte=45), 50, Thresholds())
+            report.record(whale)
+            payload = report.payload(snap().timestamp)
+            field = next(item for item in payload["embeds"][0]["fields"] if item["name"] == "Long-Dated $1M+ Activity")
+            self.assertIn("NVDA", field["value"])
+            self.assertIn("45DTE", field["value"])
 
     def test_ticker_level_aggregation_and_clustering(self):
         alerts = ticker_level_alerts([snap(strike=190), snap(strike=192.5), snap(strike=195), snap(strike=240)], Settings(cluster_min_contracts=3))
