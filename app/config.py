@@ -28,6 +28,7 @@ def csv_set(raw: str) -> set[str]:
 class Thresholds:
     min_volume: int = 500
     min_volume_0dte: int = 350
+    min_estimated_premium: float = 30_000
     vol_oi_unusual: float = 2.0
     vol_oi_very_unusual: float = 4.0
     vol_oi_extreme: float = 7.0
@@ -81,6 +82,7 @@ def load_settings() -> Settings:
     t = Thresholds(
         min_volume=int(os.getenv("UOA_MIN_VOLUME", "500")),
         min_volume_0dte=int(os.getenv("UOA_MIN_VOLUME_0DTE", "350")),
+        min_estimated_premium=float(os.getenv("UOA_MIN_ESTIMATED_PREMIUM", "30000")),
         vol_oi_unusual=float(os.getenv("UOA_VOL_OI_UNUSUAL", "2.0")),
         vol_oi_very_unusual=float(os.getenv("UOA_VOL_OI_VERY_UNUSUAL", "4.0")),
         vol_oi_extreme=float(os.getenv("UOA_VOL_OI_EXTREME", "7.0")),

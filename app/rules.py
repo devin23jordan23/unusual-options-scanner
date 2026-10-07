@@ -16,6 +16,8 @@ def evaluate_contract(snapshot: OptionSnapshot, volume_delta_5m: int, thresholds
     # alone should not resurrect an old contract.
     if volume_delta_5m < max(min_delta // 4, 1):
         return None
+    if premium < thresholds.min_estimated_premium:
+        return None
 
     if snapshot.volume >= min_volume:
         score += 1

@@ -28,7 +28,7 @@ class ScannerUnitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)
             major = evaluate_contract(snap(symbol="AMD", volume=6482, oi=903, mark=2.5), 2141, Thresholds())
-            watch = evaluate_contract(snap(symbol="MU", volume=500, oi=100, mark=0.25), 125, Thresholds(min_score=3))
+            watch = evaluate_contract(snap(symbol="MU", volume=500, oi=100, mark=3), 125, Thresholds(min_score=3))
             self.assertIsNotNone(major)
             self.assertEqual(watch.severity, Severity.WATCH)
             report.record(major)
@@ -64,6 +64,13 @@ class ScannerUnitTests(unittest.TestCase):
     def test_premium_estimate(self):
         self.assertEqual(estimated_premium(snap(mark=1.25), 400), 50_000)
 
+    def test_small_dollar_alert_is_suppressed_even_with_extreme_volume_oi(self):
+        contract = snap(volume=5000, oi=1, mark=0.50)
+        self.assertIsNone(evaluate_contract(contract, 599, Thresholds()))
+        alert = evaluate_contract(contract, 600, Thresholds())
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert.estimated_premium, 30_000)
+
     def test_dte_prioritization(self):
         alert = evaluate_contract(snap(volume=500, oi=100), 360, Thresholds(min_volume=1000, min_volume_0dte=350, min_score=3))
         self.assertIsNotNone(alert)
@@ -97,7 +104,7 @@ class ScannerUnitTests(unittest.TestCase):
             first = evaluate_contract(snap(volume=2100), 900, Thresholds(min_score=2))
             self.assertTrue(d.should_send_contract(first, 300))
             d.mark_contract(first)
-            duplicate = evaluate_contract(snap(volume=2300), 100, Thresholds(min_score=2))
+            duplicate = evaluate_contract(snap(volume=2300), 150, Thresholds(min_score=2))
             self.assertFalse(d.should_send_contract(duplicate, 300))
 
     def test_severity_escalation(self):
