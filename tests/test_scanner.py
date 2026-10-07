@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from app.aggregation import ticker_level_alerts
-from app.config import Settings, Thresholds
+from app.config import Settings, Thresholds, load_settings
 from app.discord import DiscordNotifier
 from app.daily_report import DailyOptionsReport
 from app.metrics import estimated_premium, volume_oi_ratio
@@ -25,6 +25,11 @@ def snap(symbol="NVDA", strike=195.0, side=OptionSide.CALL, volume=2500, oi=700,
 
 
 class ScannerUnitTests(unittest.TestCase):
+    def test_new_symbols_survive_existing_universe_override(self):
+        with patch.dict(os.environ, {"UOA_CORE_UNIVERSE": "SPY,AMD", "UOA_IN_PLAY": "NVDA"}):
+            settings = load_settings()
+        self.assertEqual(set(settings.active_universe), {"SPY", "AMD", "NVDA", "CSCO", "HPE"})
+
     def test_daily_report_keeps_major_flow_and_excludes_watch(self):
         with tempfile.TemporaryDirectory() as tmp:
             report = DailyOptionsReport(os.path.join(tmp, "report.json"), top_count=5)

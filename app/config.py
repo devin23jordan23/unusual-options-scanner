@@ -7,7 +7,7 @@ CORE_UNIVERSE = {
     "AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "GOOGL", "NFLX", "AVGO", "AMD", "PLTR", "COIN",
     "HOOD", "MSTR",
     "MU", "TSM", "ARM", "QCOM", "MRVL", "INTC", "AMAT", "LRCX", "KLAC", "ASML", "SNDK", "SMCI",
-    "DELL", "VRT", "ANET", "NBIS", "AAOI",
+    "DELL", "VRT", "ANET", "NBIS", "AAOI", "CSCO", "HPE",
     "NOW", "ORCL", "CRM", "ADBE", "SNOW", "DDOG", "NET", "CRWD", "PANW", "ZS", "OKTA", "TEAM",
     "MDB", "SHOP",
     "BE", "VST", "CEG", "NRG", "OKLO", "FSLR", "ENPH",
@@ -18,7 +18,6 @@ CORE_UNIVERSE = {
     "BA", "LMT", "CAT", "DE",
     "XOM", "CVX",
 }
-
 
 def csv_set(raw: str) -> set[str]:
     return {x.strip().upper() for x in raw.split(",") if x.strip()}
@@ -127,7 +126,7 @@ def load_settings() -> Settings:
         ticker_cooldown_seconds=int(os.getenv("UOA_MEGA_ETF_TICKER_COOLDOWN_SECONDS", "900")),
         long_dte_min_premium=float(os.getenv("UOA_MEGA_ETF_LONG_DTE_MIN_PREMIUM", "3000000")),
     )
-    core = csv_set(os.getenv("UOA_CORE_UNIVERSE", ",".join(sorted(CORE_UNIVERSE)))) or set(CORE_UNIVERSE)
+    core = (csv_set(os.getenv("UOA_CORE_UNIVERSE", ",".join(sorted(CORE_UNIVERSE)))) or set(CORE_UNIVERSE)) | {"CSCO", "HPE"}
     etfs = {"IWM", "DIA", "SMH", "SOXX", "XLK", "XLF", "XLE", "GLD", "USO", "SLV", "MTUM"}
     return Settings(
         mode=os.getenv("SCANNER_MODE", "live").lower(),

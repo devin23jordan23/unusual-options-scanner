@@ -13,7 +13,7 @@ OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 DISCORD_MESSAGE_LIMIT = 1900
 DEFAULT_WATCHLIST = (
     "NVDA,MU,TSLA,PLTR,AMZN,AMD,MSFT,GOOGL,AAPL,AVGO,CVX,CRCL,NBIS,"
-    "SNDK,RKLB,AAOI,DELL,LITE,MRVL,XOM"
+    "SNDK,RKLB,AAOI,DELL,LITE,MRVL,XOM,CSCO,HPE"
 )
 
 
@@ -37,6 +37,8 @@ class PremarketSettings:
 
 
 def load_settings() -> PremarketSettings:
+    watchlist = os.getenv("PREMARKET_WATCHLIST") or DEFAULT_WATCHLIST
+    watchlist = ",".join(dict.fromkeys([*(symbol.strip().upper() for symbol in watchlist.split(",") if symbol.strip()), "CSCO", "HPE"]))
     return PremarketSettings(
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         discord_webhook=os.getenv(
@@ -50,7 +52,7 @@ def load_settings() -> PremarketSettings:
         open_report_hour=int(os.getenv("PREMARKET_OPEN_REPORT_HOUR", "9")),
         open_report_minute=int(os.getenv("PREMARKET_OPEN_REPORT_MINUTE", "55")),
         schedule_window_minutes=int(os.getenv("PREMARKET_SCHEDULE_WINDOW_MINUTES", "10")),
-        watchlist=os.getenv("PREMARKET_WATCHLIST", DEFAULT_WATCHLIST),
+        watchlist=watchlist,
         prompt_path=os.getenv("PREMARKET_PROMPT_PATH", "prompts/premarket_brief.md"),
         open_prompt_path=os.getenv("PREMARKET_OPEN_PROMPT_PATH", "prompts/opening_watch.md"),
         max_output_tokens=int(os.getenv("PREMARKET_MAX_OUTPUT_TOKENS", "14000")),

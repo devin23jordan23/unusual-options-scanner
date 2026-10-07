@@ -1,10 +1,12 @@
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from app.premarket import (
     PremarketSettings,
     extract_output_text,
+    load_settings,
     report_to_run,
     scheduled_now,
     scheduled_report,
@@ -13,6 +15,10 @@ from app.premarket import (
 
 
 class PremarketUnitTests(unittest.TestCase):
+    def test_new_symbols_survive_existing_watchlist_override(self):
+        with patch.dict("os.environ", {"PREMARKET_WATCHLIST": "NVDA,CSCO"}):
+            self.assertEqual(load_settings().watchlist, "NVDA,CSCO,HPE")
+
     def settings(self):
         return PremarketSettings(openai_api_key="test", discord_webhook="test")
 
