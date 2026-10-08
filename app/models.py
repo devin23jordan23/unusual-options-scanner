@@ -46,6 +46,9 @@ class OptionSnapshot:
     ask: Optional[float] = None
     delta: Optional[float] = None
     gamma: Optional[float] = None
+    quote_time: Optional[datetime] = None
+    last_trade_time: Optional[datetime] = None
+    last_trade_price: Optional[float] = None
 
     @property
     def vol_oi(self) -> Optional[float]:

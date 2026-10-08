@@ -1,7 +1,7 @@
 import os
 import tempfile
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
@@ -16,6 +16,7 @@ from app.scanner import Scanner, select_alerts, strongest_distinct_tickers
 from app.schwab import SchwabClient
 from app.state import AlertDeduper, RollingState
 from app.oauth import callback_code
+from app.pricing import spxw_price_context
 
 
 def snap(symbol="NVDA", strike=195.0, side=OptionSide.CALL, volume=2500, oi=700, mark=2.0, dte=0, ts=None):
@@ -31,7 +32,7 @@ class ScannerUnitTests(unittest.TestCase):
         self.assertEqual(set(settings.active_universe), {"SPY", "AMD", "NVDA", "CSCO", "HPE", "SPX"})
         self.assertEqual(settings.thresholds_for("SPX"), settings.thresholds_for("SPY"))
 
-    def test_spx_chain_includes_standard_and_weekly_index_contracts(self):
+    def test_spx_chain_includes_weekly_but_excludes_standard_index_contracts(self):
         today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
         raw = lambda symbol: {"symbol": symbol, "strikePrice": 6500, "totalVolume": 100,
                               "openInterest": 10, "mark": 40, "bid": 39, "ask": 41,
@@ -43,7 +44,7 @@ class ScannerUnitTests(unittest.TestCase):
         client.settings = Settings()
         client.get = Mock(return_value=chain)
         snapshots = client.option_snapshots_for_symbol("SPX")
-        self.assertEqual({snapshot.contract.display for snapshot in snapshots}, {"SPXW 6500C", "SPX 6500C"})
+        self.assertEqual({snapshot.contract.display for snapshot in snapshots}, {"SPXW 6500C"})
         self.assertTrue(all(snapshot.contract.symbol == "SPX" for snapshot in snapshots))
         self.assertTrue(all(snapshot.underlying_price == 6500 for snapshot in snapshots))
         self.assertEqual(client.get.call_count, 1)
@@ -62,6 +63,78 @@ class ScannerUnitTests(unittest.TestCase):
                                        {"$SPX": {"quote": {"lastPrice": 6500}}}])
         self.assertEqual(client.option_snapshots_for_symbol("SPX"), [])
         self.assertEqual(client.get.call_args_list[1].args, ("/quotes", {"symbols": "$SPX"}))
+    def test_spxw_survives_universe_override_and_uses_index_flow_thresholds(self):
+        with patch.dict(os.environ, {"UOA_CORE_UNIVERSE": "SPY"}):
+            settings = load_settings()
+        self.assertIn("SPX", settings.active_universe)
+        self.assertEqual(settings.thresholds_for("SPX"), settings.thresholds_for("SPY"))
+
+    def test_spx_chain_accepts_spxw_only_and_retains_quote_times(self):
+        now = datetime.now(ZoneInfo("America/New_York"))
+        expiry = now.date().isoformat()
+        def option(symbol):
+            return {"symbol": symbol, "strikePrice": 7800, "bid": 1.10, "ask": 1.30,
+                    "mark": 1.20, "last": 1.25, "totalVolume": 15_000,
+                    "openInterest": 300, "quoteTimeInLong": int((now-timedelta(seconds=10)).timestamp()*1000),
+                    "tradeTimeInLong": int((now-timedelta(seconds=45)).timestamp()*1000)}
+        chain = {"underlyingPrice": 7800, "callExpDateMap": {f"{expiry}:0": {
+            "7800.0": [option("SPXW  261008C07800000"), option("SPX   261008C07800000")]
+        }}}
+        client = SchwabClient.__new__(SchwabClient)
+        client.settings = Settings()
+        client.get = Mock(return_value=chain)
+
+        snapshots = client.option_snapshots_for_symbol("SPX")
+
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0].contract.display, "SPXW 7800C")
+        self.assertEqual(client.get.call_args.args[1]["symbol"], "$SPX")
+        self.assertAlmostEqual(snapshots[0].last_trade_price, 1.25)
+        self.assertIn("Approx. $1.20", spxw_price_context(snapshots[0]))
+        self.assertIn("recent print $1.25", spxw_price_context(snapshots[0]))
+        alert = evaluate_contract(snapshots[0], 12_000, load_settings().thresholds_for("SPX"))
+        self.assertIsNotNone(alert)
+        description = DiscordNotifier("").group_payload([alert])["embeds"][0]["description"]
+        self.assertIn("SPXW 7800C", description)
+        self.assertIn("bid $1.10 / ask $1.30", description)
+        self.assertIn("SPXW Price Context", {f["name"] for f in DiscordNotifier("").payload(alert)["embeds"][0]["fields"]})
+
+    def test_spxw_price_context_falls_back_to_fresh_midpoint_then_unavailable(self):
+        now = datetime(2026, 10, 8, 10, 30, tzinfo=ZoneInfo("America/New_York"))
+        contract = OptionContract("SPX", "SPXW  261008P07800000", now.date(), 7800, OptionSide.PUT, 0)
+        fresh = OptionSnapshot(contract, 1000, 100, 1.20, 7800, now, bid=1.10, ask=1.30,
+                               quote_time=now-timedelta(seconds=5))
+        stale = OptionSnapshot(contract, 1000, 100, 1.20, 7800, now, bid=1.10, ask=1.30,
+                               quote_time=now-timedelta(minutes=6), last_trade_price=1.25,
+                               last_trade_time=now-timedelta(minutes=6))
+        recent_print = OptionSnapshot(contract, 1000, 100, 1.20, 7800, now, bid=1.10, ask=1.30,
+                                      quote_time=now-timedelta(minutes=6), last_trade_price=1.25,
+                                      last_trade_time=now-timedelta(seconds=50))
+        self.assertIn("Approx. $1.20 (quote midpoint", spxw_price_context(fresh))
+        self.assertIn("Approx. $1.25 (recent print", spxw_price_context(recent_print))
+        self.assertEqual(spxw_price_context(stale), "Approx. price unavailable")
+
+    def test_spx_delayed_chain_does_not_emit_spxw_price(self):
+        client = SchwabClient.__new__(SchwabClient)
+        client.settings = Settings()
+        client.get = Mock(return_value={"isDelayed": True, "underlyingPrice": 7800})
+        self.assertEqual(client.option_snapshots_for_symbol("SPX"), [])
+
+    def test_daily_report_separates_spxw_flow_and_preserves_price_context(self):
+        now = datetime(2026, 10, 8, 10, 30, tzinfo=ZoneInfo("America/New_York"))
+        contract = OptionContract("SPX", "SPXW  261008C07800000", now.date(), 7800, OptionSide.CALL, 0)
+        snapshot = OptionSnapshot(contract, 15_000, 300, 1.20, 7800, now,
+                                  bid=1.10, ask=1.30, quote_time=now-timedelta(seconds=5))
+        alert = evaluate_contract(snapshot, 12_000, load_settings().thresholds_for("SPX"))
+        self.assertIsNotNone(alert)
+        with tempfile.TemporaryDirectory() as tmp:
+            report = DailyOptionsReport(os.path.join(tmp, "report.json"))
+            report.record(alert)
+            payload = report.payload(now)
+        fields = {field["name"]: field["value"] for field in payload["embeds"][0]["fields"]}
+        self.assertIn("SPXW Call Flow (separate)", fields)
+        self.assertIn("Approx. $1.20", fields["SPXW Call Flow (separate)"])
+        self.assertNotIn("SPXW", fields["Major Call Volume"])
 
     def test_daily_report_keeps_major_flow_and_excludes_watch(self):
         with tempfile.TemporaryDirectory() as tmp:

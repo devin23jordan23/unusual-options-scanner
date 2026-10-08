@@ -2,6 +2,7 @@ import logging
 import time
 
 from .models import Alert, OptionSide
+from .pricing import spxw_price_context
 
 LOG = logging.getLogger(__name__)
 
@@ -68,6 +69,8 @@ class DiscordNotifier:
             ]
         if alert.alert_type == "contract":
             fields.append({"name": "Estimated Activity", "value": f"${alert.estimated_premium:,.0f}", "inline": True})
+        if snap.contract.symbol == "SPX":
+            fields.append({"name": "SPXW Price Context", "value": spxw_price_context(snap), "inline": False})
         return {
             "username": "Unusual Options Scanner",
             "embeds": [{
@@ -75,7 +78,8 @@ class DiscordNotifier:
                 "description": f"{'Green Calls' if snap.contract.side == OptionSide.CALL else 'Red Puts'} | {alert.severity.value}",
                 "color": color,
                 "fields": fields,
-                "footer": {"text": "Market data alert only. Not a trade recommendation."},
+                "footer": {"text": "Market data only. SPXW prices are nearby prints/quotes, not identified fills." if snap.contract.symbol == "SPX"
+                           else "Market data alert only. Not a trade recommendation."},
             }],
         }
 
@@ -113,10 +117,11 @@ class DiscordNotifier:
             underlying_label = "Index" if contract.symbol == "SPX" else "Stock"
             contract_root = contract.display.split(" ", 1)[0]
             root_label = f"{contract_root} " if contract.symbol == "SPX" else ""
+            price_line = f"\n{spxw_price_context(snap)}" if contract.symbol == "SPX" else ""
             sections.append(
                 f"**{marker}{side_marker} {contract.symbol} {side} · {alert.severity.value}{whale_label}**\n"
                 f"{root_label}{detail}\n"
-                f"Vol {volume:,} / OI {oi:,} · {ratio_text} · {underlying_label} {spot}"
+                f"Vol {volume:,} / OI {oi:,} · {ratio_text} · {underlying_label} {spot}{price_line}"
             )
         return {
             "username": "Unusual Options Scanner",
@@ -124,7 +129,9 @@ class DiscordNotifier:
                 "title": f"Unusual Options · {symbols}",
                 "description": "\n\n".join(sections),
                 "color": color,
-                "footer": {"text": "Market data alert only. Not a trade recommendation."},
+                "footer": {"text": "Market data only. SPXW prices are nearby prints/quotes, not identified fills." if any(
+                    alert.snapshot.contract.symbol == "SPX" for alert in alerts)
+                           else "Market data alert only. Not a trade recommendation."},
             }],
         }
 

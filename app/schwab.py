@@ -67,6 +67,8 @@ class SchwabClient:
             "toDate": (now.date() + timedelta(days=self.settings.max_dte)).isoformat(),
         }
         data = self.get("/chains", params)
+        if symbol == "SPX" and data.get("isDelayed") is True:
+            return []
         chain_underlying = extract_underlying_price(data) or underlying
         if not chain_underlying and symbol == "SPX":
             chain_underlying = self.quote_price(api_symbol)
@@ -214,6 +216,8 @@ class SchwabClient:
                 if strike is None:
                     continue
                 for raw in contracts:
+                    if symbol == "SPX" and str(raw.get("symbol", "")).split()[0:1] != ["SPXW"]:
+                        continue
                     bid = num(raw.get("bid"))
                     ask = num(raw.get("ask"))
                     mark = num(raw.get("mark")) or midpoint(bid, ask) or num(raw.get("last")) or 0
@@ -236,6 +240,9 @@ class SchwabClient:
                         ask=ask,
                         delta=num(raw.get("delta")),
                         gamma=num(raw.get("gamma")),
+                        quote_time=option_time(raw.get("quoteTimeInLong"), self.settings.timezone),
+                        last_trade_time=option_time(raw.get("tradeTimeInLong"), self.settings.timezone),
+                        last_trade_price=num(raw.get("last")),
                     ))
         return out
 
@@ -284,6 +291,15 @@ def num(value) -> float | None:
             return None
         return float(value)
     except (TypeError, ValueError):
+        return None
+
+
+def option_time(value, timezone: str) -> datetime | None:
+    try:
+        if value is None or float(value) <= 0:
+            return None
+        return datetime.fromtimestamp(float(value) / 1000, ZoneInfo(timezone))
+    except (TypeError, ValueError, OverflowError, OSError):
         return None
 
 

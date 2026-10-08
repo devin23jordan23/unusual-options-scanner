@@ -17,6 +17,7 @@ This is not the old stock scanner and does not import it at runtime. Schwab auth
 - Scans 0DTE through 60DTE with stricter requirements for noisy ETFs and longer-dated flow
 - Focuses strikes near spot, with exceptional-volume escape hatch
 - Detects unusual volume, Vol/OI, large estimated premium, and 5-minute acceleration
+- Scans SPXW contracts through Schwab's `$SPX` chain. SPXW uses the existing SPY/QQQ index-flow thresholds and appears as a separate root in alerts and reports. SPX standard-expiration contracts are excluded. SPXW alerts show an approximate contract price from a fresh bid/ask midpoint; a trade reported within five minutes is shown separately, or used as a fallback when the quote is stale. Times and bid/ask are included when available. This is price context, not a confirmed buyer fill.
 - Lets 30DTE-60DTE whale flow through when premium/Vol-OI is meaningful
 - Ranks individual contracts without emitting multi-strike cluster alerts
 - Suppresses duplicate alerts with cooldown and escalation rules
