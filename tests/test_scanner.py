@@ -28,7 +28,40 @@ class ScannerUnitTests(unittest.TestCase):
     def test_new_symbols_survive_existing_universe_override(self):
         with patch.dict(os.environ, {"UOA_CORE_UNIVERSE": "SPY,AMD", "UOA_IN_PLAY": "NVDA"}):
             settings = load_settings()
-        self.assertEqual(set(settings.active_universe), {"SPY", "AMD", "NVDA", "CSCO", "HPE"})
+        self.assertEqual(set(settings.active_universe), {"SPY", "AMD", "NVDA", "CSCO", "HPE", "SPX"})
+        self.assertEqual(settings.thresholds_for("SPX"), settings.thresholds_for("SPY"))
+
+    def test_spx_chain_includes_standard_and_weekly_index_contracts(self):
+        today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
+        raw = lambda symbol: {"symbol": symbol, "strikePrice": 6500, "totalVolume": 100,
+                              "openInterest": 10, "mark": 40, "bid": 39, "ask": 41,
+                              "isIndexOption": True}
+        chain = {"underlyingPrice": 6500, "callExpDateMap": {
+            f"{today}:0": {"6500.0": [raw("SPXW  261008C06500000"), raw("SPX   261008C06500000")]}
+        }}
+        client = SchwabClient.__new__(SchwabClient)
+        client.settings = Settings()
+        client.get = Mock(return_value=chain)
+        snapshots = client.option_snapshots_for_symbol("SPX")
+        self.assertEqual({snapshot.contract.display for snapshot in snapshots}, {"SPXW 6500C", "SPX 6500C"})
+        self.assertTrue(all(snapshot.contract.symbol == "SPX" for snapshot in snapshots))
+        self.assertTrue(all(snapshot.underlying_price == 6500 for snapshot in snapshots))
+        self.assertEqual(client.get.call_count, 1)
+        self.assertEqual(client.get.call_args.args[0], "/chains")
+        self.assertEqual(client.get.call_args.args[1]["symbol"], "$SPX")
+        alert = evaluate_contract(snapshots[0], 100, Thresholds())
+        self.assertIsNotNone(alert)
+        formatted = DiscordNotifier("").group_payload([alert])["embeds"][0]["description"]
+        self.assertIn("SPXW 6500C", formatted)
+        self.assertIn("Index $6500.00", formatted)
+
+    def test_spx_chain_uses_index_quote_when_chain_omits_underlying_price(self):
+        client = SchwabClient.__new__(SchwabClient)
+        client.settings = Settings()
+        client.get = Mock(side_effect=[{"callExpDateMap": {}, "putExpDateMap": {}},
+                                       {"$SPX": {"quote": {"lastPrice": 6500}}}])
+        self.assertEqual(client.option_snapshots_for_symbol("SPX"), [])
+        self.assertEqual(client.get.call_args_list[1].args, ("/quotes", {"symbols": "$SPX"}))
 
     def test_daily_report_keeps_major_flow_and_excludes_watch(self):
         with tempfile.TemporaryDirectory() as tmp:

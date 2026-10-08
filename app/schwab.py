@@ -52,12 +52,13 @@ class SchwabClient:
         return out
 
     def option_snapshots_for_symbol(self, symbol: str) -> list[OptionSnapshot]:
-        underlying = self.quote_price(symbol)
-        if not underlying:
+        api_symbol = "$SPX" if symbol == "SPX" else symbol
+        underlying = None if symbol == "SPX" else self.quote_price(api_symbol)
+        if symbol != "SPX" and not underlying:
             return []
         now = datetime.now(ZoneInfo(self.settings.timezone))
         params = {
-            "symbol": symbol,
+            "symbol": api_symbol,
             "contractType": "ALL",
             "strategy": "SINGLE",
             "includeUnderlyingQuote": "true",
@@ -67,6 +68,10 @@ class SchwabClient:
         }
         data = self.get("/chains", params)
         chain_underlying = extract_underlying_price(data) or underlying
+        if not chain_underlying and symbol == "SPX":
+            chain_underlying = self.quote_price(api_symbol)
+        if not chain_underlying:
+            return []
         snaps = []
         snaps.extend(self._parse_side(symbol, data.get("callExpDateMap", {}), OptionSide.CALL, chain_underlying, now))
         snaps.extend(self._parse_side(symbol, data.get("putExpDateMap", {}), OptionSide.PUT, chain_underlying, now))

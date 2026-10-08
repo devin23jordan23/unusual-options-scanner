@@ -28,7 +28,10 @@ class OptionContract:
     @property
     def display(self) -> str:
         strike = int(self.strike) if self.strike == int(self.strike) else self.strike
-        return f"{self.symbol} {strike}{'C' if self.side == OptionSide.CALL else 'P'}"
+        root = self.option_symbol.split()[0] if self.symbol == "SPX" and self.option_symbol else self.symbol
+        if root not in {"SPX", "SPXW"}:
+            root = self.symbol
+        return f"{root} {strike}{'C' if self.side == OptionSide.CALL else 'P'}"
 
 
 @dataclass

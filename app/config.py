@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, replace
 
 
 CORE_UNIVERSE = {
-    "SPY", "QQQ", "IWM", "DIA", "SMH", "SOXX", "XLK", "XLF", "XLE", "GLD", "USO", "SLV", "MTUM",
+    "SPX", "SPY", "QQQ", "IWM", "DIA", "SMH", "SOXX", "XLK", "XLF", "XLE", "GLD", "USO", "SLV", "MTUM",
     "AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "GOOGL", "NFLX", "AVGO", "AMD", "PLTR", "COIN",
     "HOOD", "MSTR",
     "MU", "TSM", "ARM", "QCOM", "MRVL", "INTC", "AMAT", "LRCX", "KLAC", "ASML", "SNDK", "SMCI",
@@ -126,7 +126,7 @@ def load_settings() -> Settings:
         ticker_cooldown_seconds=int(os.getenv("UOA_MEGA_ETF_TICKER_COOLDOWN_SECONDS", "900")),
         long_dte_min_premium=float(os.getenv("UOA_MEGA_ETF_LONG_DTE_MIN_PREMIUM", "3000000")),
     )
-    core = (csv_set(os.getenv("UOA_CORE_UNIVERSE", ",".join(sorted(CORE_UNIVERSE)))) or set(CORE_UNIVERSE)) | {"CSCO", "HPE"}
+    core = (csv_set(os.getenv("UOA_CORE_UNIVERSE", ",".join(sorted(CORE_UNIVERSE)))) or set(CORE_UNIVERSE)) | {"CSCO", "HPE", "SPX"}
     etfs = {"IWM", "DIA", "SMH", "SOXX", "XLK", "XLF", "XLE", "GLD", "USO", "SLV", "MTUM"}
     return Settings(
         mode=os.getenv("SCANNER_MODE", "live").lower(),
@@ -149,5 +149,5 @@ def load_settings() -> Settings:
         daily_report_minute=int(os.getenv("UOA_DAILY_REPORT_MINUTE", "5")),
         daily_report_top_count=int(os.getenv("UOA_DAILY_REPORT_TOP_COUNT", "5")),
         thresholds=t,
-        symbol_overrides={**{symbol: etf_t for symbol in etfs}, "SPY": mega_etf_t, "QQQ": mega_etf_t},
+        symbol_overrides={**{symbol: etf_t for symbol in etfs}, "SPX": mega_etf_t, "SPY": mega_etf_t, "QQQ": mega_etf_t},
     )

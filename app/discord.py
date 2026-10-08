@@ -110,10 +110,13 @@ class DiscordNotifier:
                 detail = f"{format_strike(contract.strike)}{'C' if side == 'CALL' else 'P'} · {contract.dte} DTE · Est. ${alert.estimated_premium:,.0f}"
             ratio_text = "n/a" if ratio is None else f"{ratio:.2f}x"
             whale_label = " · LONG-DATED" if alert.long_dated_whale else ""
+            underlying_label = "Index" if contract.symbol == "SPX" else "Stock"
+            contract_root = contract.display.split(" ", 1)[0]
+            root_label = f"{contract_root} " if contract.symbol == "SPX" else ""
             sections.append(
                 f"**{marker}{side_marker} {contract.symbol} {side} · {alert.severity.value}{whale_label}**\n"
-                f"{detail}\n"
-                f"Vol {volume:,} / OI {oi:,} · {ratio_text} · Stock {spot}"
+                f"{root_label}{detail}\n"
+                f"Vol {volume:,} / OI {oi:,} · {ratio_text} · {underlying_label} {spot}"
             )
         return {
             "username": "Unusual Options Scanner",
