@@ -81,7 +81,7 @@ class Scanner:
                 ticker_cooldown(alert, self.settings),
             )
         ]
-        selected = select_alerts(eligible, self.settings.max_alerts_per_cycle)
+        selected = select_alerts(eligible)
         eligible_directions = {ticker_dedupe_key(alert) for alert in eligible if not alert.long_dated_whale}
         selected_directions = {ticker_dedupe_key(alert) for alert in selected if not alert.long_dated_whale}
         for offset in range(0, len(selected), 3):
@@ -92,7 +92,7 @@ class Scanner:
                     if alert.alert_type == "contract":
                         self.deduper.mark_contract(alert)
         LOG.info(
-            "scan complete option_snapshots=%s qualified=%s eligible=%s eligible_directions=%s selected=%s capped_directions=%s",
+            "scan complete option_snapshots=%s qualified=%s eligible=%s eligible_directions=%s selected=%s omitted_directions=%s",
             len(snapshots),
             len(candidates),
             len(eligible),
@@ -102,9 +102,7 @@ class Scanner:
         )
 
 
-def strongest_distinct_tickers(alerts, limit: int):
-    if limit <= 0:
-        return []
+def strongest_distinct_tickers(alerts):
     ranked = sorted(alerts, key=alert_rank, reverse=True)
     selected = []
     seen = set()
@@ -114,12 +112,10 @@ def strongest_distinct_tickers(alerts, limit: int):
             continue
         seen.add(direction)
         selected.append(alert)
-        if len(selected) >= max(limit, 0):
-            break
     return selected
 
 
-def select_alerts(alerts, regular_limit: int):
+def select_alerts(alerts):
     whales = sorted(
         (alert for alert in alerts if alert.long_dated_whale),
         key=lambda alert: (alert.estimated_premium, alert_rank(alert)),
@@ -128,7 +124,7 @@ def select_alerts(alerts, regular_limit: int):
     selected = list(whales)
     whale_symbols = {alert.snapshot.contract.symbol for alert in whales}
     regular = [alert for alert in alerts if not alert.long_dated_whale and alert.snapshot.contract.symbol not in whale_symbols]
-    selected.extend(strongest_distinct_tickers(regular, max(regular_limit - len(selected), 0)))
+    selected.extend(strongest_distinct_tickers(regular))
     return selected
 
 

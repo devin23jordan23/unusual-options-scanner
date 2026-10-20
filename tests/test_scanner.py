@@ -291,20 +291,25 @@ class ScannerUnitTests(unittest.TestCase):
             restarted = RollingState(path)
             self.assertFalse(restarted.has_history(today))
 
-    def test_alert_selection_caps_and_deduplicates_tickers(self):
+    def test_alert_selection_deduplicates_ticker_directions(self):
         nvda = evaluate_contract(snap(symbol="NVDA", volume=7000, oi=500, mark=3), 4000, Thresholds())
         nvda_second = evaluate_contract(snap(symbol="NVDA", strike=200, volume=6000, oi=500, mark=2), 3000, Thresholds())
         tsla = evaluate_contract(snap(symbol="TSLA", volume=5000, oi=500, mark=2), 2500, Thresholds())
-        selected = strongest_distinct_tickers([nvda_second, tsla, nvda], 2)
+        selected = strongest_distinct_tickers([nvda_second, tsla, nvda])
         self.assertEqual(len(selected), 2)
         self.assertEqual({a.snapshot.contract.symbol for a in selected}, {"NVDA", "TSLA"})
+
+    def test_every_eligible_direction_survives_selection(self):
+        alerts = [evaluate_contract(snap(symbol=symbol, volume=7000, oi=500, mark=3), 4000, Thresholds())
+                  for symbol in ("NVDA", "TSLA", "AAPL", "MU", "SPY", "QQQ")]
+        self.assertEqual(len(select_alerts(alerts)), 6)
 
     def test_opposite_sides_of_same_ticker_are_distinct_flow(self):
         call = evaluate_contract(snap(symbol="SPY", side=OptionSide.CALL, volume=7000, oi=500, mark=3), 4000, Thresholds())
         put = evaluate_contract(snap(symbol="SPY", side=OptionSide.PUT, volume=7000, oi=500, mark=3), 4000, Thresholds())
         self.assertEqual(ticker_dedupe_key(call), "SPY:CALL")
         self.assertEqual(ticker_dedupe_key(put), "SPY:PUT")
-        self.assertEqual(set(map(ticker_dedupe_key, strongest_distinct_tickers([call, put], 2))), {"SPY:CALL", "SPY:PUT"})
+        self.assertEqual(set(map(ticker_dedupe_key, strongest_distinct_tickers([call, put]))), {"SPY:CALL", "SPY:PUT"})
         with tempfile.TemporaryDirectory() as tmp:
             deduper = AlertDeduper(os.path.join(tmp, "state.json"))
             now = call.snapshot.timestamp.timestamp()
@@ -312,24 +317,24 @@ class ScannerUnitTests(unittest.TestCase):
             self.assertFalse(deduper.should_send_ticker(ticker_dedupe_key(call), now, 900))
             self.assertTrue(deduper.should_send_ticker(ticker_dedupe_key(put), now, 900))
 
-    def test_long_dated_whales_take_priority_beyond_regular_limit(self):
+    def test_long_dated_whales_take_priority_without_hiding_regular_flow(self):
         regular = [evaluate_contract(snap(symbol=symbol, volume=8000, oi=500, mark=3), 5000, Thresholds())
                    for symbol in ("AMD", "TSLA", "META")]
         whales = [evaluate_contract(snap(symbol=symbol, volume=50, oi=1000, mark=200, dte=45), 50, Thresholds())
                   for symbol in ("NVDA", "SPY", "QQQ", "MSFT")]
-        selected = select_alerts(regular + whales, 3)
-        self.assertEqual({alert.snapshot.contract.symbol for alert in selected}, {"NVDA", "SPY", "QQQ", "MSFT"})
-        self.assertTrue(all(alert.long_dated_whale for alert in selected))
-        self.assertEqual(strongest_distinct_tickers(regular, 0), [])
+        selected = select_alerts(regular + whales)
+        self.assertEqual({alert.snapshot.contract.symbol for alert in selected}, {"AMD", "TSLA", "META", "NVDA", "SPY", "QQQ", "MSFT"})
+        self.assertTrue(all(alert.long_dated_whale for alert in selected[:4]))
+        self.assertEqual(len(strongest_distinct_tickers(regular)), 3)
 
     def test_distinct_long_dated_contracts_on_same_ticker_are_both_sent(self):
         first = evaluate_contract(snap(symbol="NVDA", strike=195, volume=50, mark=200, dte=45), 50, Thresholds())
         second = evaluate_contract(snap(symbol="NVDA", strike=200, volume=60, mark=200, dte=45), 60, Thresholds())
-        self.assertEqual(select_alerts([first, second], 1), [second, first])
+        self.assertEqual(select_alerts([first, second]), [second, first])
 
-    def test_scanner_sends_whales_despite_ticker_cooldown_and_regular_cap(self):
+    def test_scanner_sends_whales_despite_ticker_cooldown(self):
         scanner = Scanner.__new__(Scanner)
-        scanner.settings = Settings(core_universe={"NVDA"}, max_alerts_per_cycle=1)
+        scanner.settings = Settings(core_universe={"NVDA"})
         contracts = [snap(symbol=symbol, volume=50, oi=1000, mark=200, dte=45)
                      for symbol in ("NVDA", "SPY", "QQQ", "MSFT")]
         scanner.data = Mock(option_snapshots=Mock(return_value=contracts))
