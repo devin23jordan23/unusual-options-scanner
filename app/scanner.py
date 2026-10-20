@@ -82,6 +82,8 @@ class Scanner:
             )
         ]
         selected = select_alerts(eligible, self.settings.max_alerts_per_cycle)
+        eligible_directions = {ticker_dedupe_key(alert) for alert in eligible if not alert.long_dated_whale}
+        selected_directions = {ticker_dedupe_key(alert) for alert in selected if not alert.long_dated_whale}
         for offset in range(0, len(selected), 3):
             group = selected[offset:offset + 3]
             if self.discord.send_group(group):
@@ -90,10 +92,13 @@ class Scanner:
                     if alert.alert_type == "contract":
                         self.deduper.mark_contract(alert)
         LOG.info(
-            "scan complete option_snapshots=%s qualified=%s selected=%s",
+            "scan complete option_snapshots=%s qualified=%s eligible=%s eligible_directions=%s selected=%s capped_directions=%s",
             len(snapshots),
             len(candidates),
+            len(eligible),
+            len(eligible_directions),
             len(selected),
+            ",".join(sorted(eligible_directions - selected_directions)) or "none",
         )
 
 
@@ -104,10 +109,10 @@ def strongest_distinct_tickers(alerts, limit: int):
     selected = []
     seen = set()
     for alert in ranked:
-        symbol = alert.snapshot.contract.symbol
-        if symbol in seen:
+        direction = ticker_dedupe_key(alert)
+        if direction in seen:
             continue
-        seen.add(symbol)
+        seen.add(direction)
         selected.append(alert)
         if len(selected) >= max(limit, 0):
             break
@@ -138,7 +143,7 @@ def alert_rank(alert):
 
 
 def ticker_dedupe_key(alert) -> str:
-    return f"{alert.snapshot.contract.symbol}:ALL"
+    return f"{alert.snapshot.contract.symbol}:{alert.snapshot.contract.side.value}"
 
 
 def ticker_cooldown(alert, settings: Settings) -> int:

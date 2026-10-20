@@ -12,7 +12,7 @@ from app.daily_report import DailyOptionsReport
 from app.metrics import estimated_premium, volume_oi_ratio
 from app.models import OptionContract, OptionSide, OptionSnapshot, Severity
 from app.rules import evaluate_contract
-from app.scanner import Scanner, select_alerts, strongest_distinct_tickers
+from app.scanner import Scanner, select_alerts, strongest_distinct_tickers, ticker_dedupe_key
 from app.schwab import SchwabClient
 from app.state import AlertDeduper, RollingState
 from app.oauth import callback_code
@@ -298,6 +298,19 @@ class ScannerUnitTests(unittest.TestCase):
         selected = strongest_distinct_tickers([nvda_second, tsla, nvda], 2)
         self.assertEqual(len(selected), 2)
         self.assertEqual({a.snapshot.contract.symbol for a in selected}, {"NVDA", "TSLA"})
+
+    def test_opposite_sides_of_same_ticker_are_distinct_flow(self):
+        call = evaluate_contract(snap(symbol="SPY", side=OptionSide.CALL, volume=7000, oi=500, mark=3), 4000, Thresholds())
+        put = evaluate_contract(snap(symbol="SPY", side=OptionSide.PUT, volume=7000, oi=500, mark=3), 4000, Thresholds())
+        self.assertEqual(ticker_dedupe_key(call), "SPY:CALL")
+        self.assertEqual(ticker_dedupe_key(put), "SPY:PUT")
+        self.assertEqual(set(map(ticker_dedupe_key, strongest_distinct_tickers([call, put], 2))), {"SPY:CALL", "SPY:PUT"})
+        with tempfile.TemporaryDirectory() as tmp:
+            deduper = AlertDeduper(os.path.join(tmp, "state.json"))
+            now = call.snapshot.timestamp.timestamp()
+            deduper.mark_ticker(ticker_dedupe_key(call), now)
+            self.assertFalse(deduper.should_send_ticker(ticker_dedupe_key(call), now, 900))
+            self.assertTrue(deduper.should_send_ticker(ticker_dedupe_key(put), now, 900))
 
     def test_long_dated_whales_take_priority_beyond_regular_limit(self):
         regular = [evaluate_contract(snap(symbol=symbol, volume=8000, oi=500, mark=3), 5000, Thresholds())
