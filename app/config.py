@@ -63,7 +63,6 @@ class Settings:
     strike_range_pct: float = 0.10
     cluster_min_contracts: int = 3
     cluster_max_strike_gap_pct: float = 0.025
-    max_alerts_per_cycle: int = 3
     symbol_cooldown_seconds: int = 900
     daily_report_enabled: bool = True
     daily_report_hour: int = 16
@@ -142,7 +141,6 @@ def load_settings() -> Settings:
         strike_range_pct=float(os.getenv("UOA_STRIKE_RANGE_PCT", "0.10")),
         cluster_min_contracts=int(os.getenv("UOA_CLUSTER_MIN_CONTRACTS", "3")),
         cluster_max_strike_gap_pct=float(os.getenv("UOA_CLUSTER_MAX_STRIKE_GAP_PCT", "0.025")),
-        max_alerts_per_cycle=int(os.getenv("UOA_MAX_ALERTS_PER_CYCLE", "3")),
         symbol_cooldown_seconds=int(os.getenv("UOA_SYMBOL_COOLDOWN_SECONDS", "900")),
         daily_report_enabled=os.getenv("UOA_DAILY_REPORT_ENABLED", "true").lower() not in {"0", "false", "no"},
         daily_report_hour=int(os.getenv("UOA_DAILY_REPORT_HOUR", "16")),
