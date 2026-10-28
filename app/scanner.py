@@ -67,6 +67,8 @@ class Scanner:
             if not alert:
                 continue
             self.daily_report.record(alert)
+            if alert.estimated_premium <= max(150_000, self.settings.min_card_premium):
+                continue
             cooldown = self.settings.thresholds_for(snap.contract.symbol).contract_cooldown_seconds
             if self.deduper.should_send_contract(alert, cooldown):
                 candidates.append(alert)

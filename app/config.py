@@ -64,6 +64,7 @@ class Settings:
     cluster_min_contracts: int = 3
     cluster_max_strike_gap_pct: float = 0.025
     symbol_cooldown_seconds: int = 900
+    min_card_premium: float = 150_000
     daily_report_enabled: bool = True
     daily_report_hour: int = 16
     daily_report_minute: int = 5
@@ -142,6 +143,7 @@ def load_settings() -> Settings:
         cluster_min_contracts=int(os.getenv("UOA_CLUSTER_MIN_CONTRACTS", "3")),
         cluster_max_strike_gap_pct=float(os.getenv("UOA_CLUSTER_MAX_STRIKE_GAP_PCT", "0.025")),
         symbol_cooldown_seconds=int(os.getenv("UOA_SYMBOL_COOLDOWN_SECONDS", "900")),
+        min_card_premium=max(150_000, float(os.getenv("UOA_MIN_CARD_PREMIUM", "150000"))),
         daily_report_enabled=os.getenv("UOA_DAILY_REPORT_ENABLED", "true").lower() not in {"0", "false", "no"},
         daily_report_hour=int(os.getenv("UOA_DAILY_REPORT_HOUR", "16")),
         daily_report_minute=int(os.getenv("UOA_DAILY_REPORT_MINUTE", "5")),
