@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 
 CORE_UNIVERSE = {
     "SPX", "SPY", "QQQ", "IWM", "DIA", "SMH", "SOXX", "XLK", "XLF", "XLE", "GLD", "USO", "SLV", "MTUM",
-    "AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "GOOGL", "NFLX", "AVGO", "AMD", "PLTR", "COIN",
+    "AAPL", "MSFT", "NVDA", "TSLA", "META", "AMZN", "GOOGL", "NFLX", "DIS", "AVGO", "AMD", "PLTR", "COIN",
     "HOOD", "MSTR",
     "MU", "TSM", "ARM", "QCOM", "MRVL", "INTC", "AMAT", "LRCX", "KLAC", "ASML", "SNDK", "SMCI",
     "DELL", "VRT", "ANET", "NBIS", "AAOI", "CSCO", "HPE", "SKHY",
